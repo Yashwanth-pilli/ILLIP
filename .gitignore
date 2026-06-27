@@ -74,6 +74,9 @@ data/telegram_owner.txt
 Thumbs.db
 .DS_Store
 
+# Scripts (venv binaries)
+scripts/*.exe
+
 # Testing
 .pytest_cache/
 .coverage
