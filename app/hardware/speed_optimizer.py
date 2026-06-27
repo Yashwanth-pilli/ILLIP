@@ -23,9 +23,14 @@ _PREFILL_BATCH = 512
 _warmed: dict[str, int] = {}   # model -> num_ctx currently loaded
 
 
-def get_warmed_ctx(model: str, fallback: int = 2048) -> int:
-    """Return the num_ctx the model was pre-warmed with, or fallback."""
+def get_warmed_ctx(model: str, fallback=2048):
+    """Return the num_ctx the model is loaded with, or fallback (can be None)."""
     return _warmed.get(model, fallback)
+
+
+def mark_warmed(model: str, num_ctx: int) -> None:
+    """Mark a model as loaded in VRAM with the given context size."""
+    _warmed[model] = num_ctx
 
 
 async def _get_current_ctx(model: str, base_url: str) -> int:
@@ -127,15 +132,10 @@ async def auto_select_model(base_url: str = "http://localhost:11434") -> str | N
         if not installed:
             return None
 
-        recommended = recommend_model_for_hardware()
-        # Exact match
-        if recommended in installed:
+        from app.hardware.ghost_engine import recommend_model
+        recommended = await recommend_model(base_url)
+        if recommended and recommended in installed:
             return recommended
-        # Family match (e.g. qwen2.5:7b-instruct matches qwen2.5:7b)
-        rec_family = recommended.split(":")[0]
-        for name in installed:
-            if name.split(":")[0] == rec_family:
-                return name
         # Fallback: return any installed model
         return next(iter(installed))
     except Exception:

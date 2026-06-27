@@ -154,20 +154,16 @@ async def get_hardware_live():
 
 
 @router.get("/ghost-engine/{model_name:path}")
-async def get_ghost_plan(model_name: str, ctx: int = 8192, live: bool = False):
+async def get_ghost_plan(model_name: str, ctx: int = 8192):
     """
-    Calculate Ghost Engine loading plan for a model on current hardware.
-    live=true: queries Ollama /api/show for real architecture (any model, any quant).
-    live=false: uses local DB, fast, no Ollama needed.
+    Calculate Ghost Engine loading plan for any model on current hardware.
+    Queries Ollama /api/show for real architecture (param count, quant, layers).
+    Falls back to name-based estimation if Ollama offline.
     """
     try:
-        if live:
-            from app.hardware.ghost_engine import calculate_plan_async
-            from app.config import settings as _cfg
-            plan = await calculate_plan_async(model_name, requested_ctx=ctx, base_url=_cfg.ollama_base_url)
-        else:
-            from app.hardware.ghost_engine import calculate_plan
-            plan = calculate_plan(model_name, requested_ctx=ctx)
+        from app.hardware.ghost_engine import calculate_plan
+        from app.config import settings as _cfg
+        plan = await calculate_plan(model_name, requested_ctx=ctx, base_url=_cfg.ollama_base_url)
         return {
             "model":          plan.model,
             "strategy":       plan.strategy,
@@ -177,21 +173,24 @@ async def get_ghost_plan(model_name: str, ctx: int = 8192, live: bool = False):
             "vram_used_gb":   plan.vram_used_gb,
             "ram_used_gb":    plan.ram_used_gb,
             "context_limit":  plan.context_limit,
-            "use_kv_offload": plan.use_kv_offload,
             "feasible":       plan.feasible,
             "warnings":       plan.warnings,
             "ollama_options": plan.ollama_options,
+            "draft_model":    plan.draft_model,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/ghost-engine/recommend")
-async def recommend_model():
-    """Recommend best model for current hardware."""
-    from app.hardware.ghost_engine import recommend_model_for_hardware, calculate_plan
-    model = recommend_model_for_hardware()
-    plan = calculate_plan(model)
+@router.get("/ghost-engine-recommend")
+async def ghost_recommend_model():
+    """Recommend best installed model for current hardware. Dynamic — no hardcoding."""
+    from app.hardware.ghost_engine import recommend_model, calculate_plan
+    from app.config import settings as _cfg
+    model = await recommend_model(_cfg.ollama_base_url)
+    if not model:
+        return {"recommended_model": None, "reason": "No models installed or Ollama offline"}
+    plan = await calculate_plan(model, base_url=_cfg.ollama_base_url)
     return {"recommended_model": model, "plan": plan.ollama_options, "strategy": plan.strategy}
 
 
@@ -217,13 +216,13 @@ async def list_models_with_plans():
     For each: ghost plan, VRAM fit, strategy, hardware recommendation.
     Nothing hardcoded — pulls live from Ollama /api/tags + hardware detector.
     """
-    from app.hardware.ghost_engine import calculate_plan_async, recommend_model_for_hardware
+    from app.hardware.ghost_engine import calculate_plan, recommend_model
     from app.hardware.detector import get_hardware_info
     from app.config import settings as _cfg
     import aiohttp
 
     hw = get_hardware_info()
-    recommended = recommend_model_for_hardware()
+    recommended = await recommend_model(_cfg.ollama_base_url) or ""
 
     # Fetch installed models from Ollama
     installed = []
@@ -245,7 +244,7 @@ async def list_models_with_plans():
         size_bytes = m.get("size", 0)
         size_gb = round(size_bytes / 1024 ** 3, 2)
         try:
-            plan = await calculate_plan_async(name, 8192, _cfg.ollama_base_url)
+            plan = await calculate_plan(name, 8192, _cfg.ollama_base_url)
             results.append({
                 "name": name,
                 "size_gb": size_gb,

@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI):
     from app.hardware.speed_optimizer import warmup_on_startup
     logger.info("ILLIP AI starting up...")
     logger.info(f"Configuration: {settings.model_provider}")
+    # Start GPU safety monitor
+    from app.hardware.safety_monitor import start_monitor
+    start_monitor()
     # Pre-warm default model in background so first user message is fast
     asyncio.create_task(warmup_on_startup(settings.ollama_model, settings.ollama_base_url))
     # Start Telegram bot if token is configured

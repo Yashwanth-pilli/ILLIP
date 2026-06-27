@@ -21,16 +21,24 @@ class OllamaProvider(BaseProvider):
         self.timeout = 300  # 5 min for large models
         self._ghost_plan = None  # cached GhostPlan
 
-    def _get_ghost_options(self, model: str, num_ctx: int) -> dict:
-        """Get Ghost Engine + speed optimizer options for this model + hardware."""
+    async def _get_ghost_options(self, model: str, num_ctx: int) -> dict:
+        """
+        Ghost Engine options for INITIAL model load only.
+        Called when model is not yet warmed in VRAM.
+        Returns full options: num_gpu, num_thread, num_ctx, use_mmap, use_mlock.
+        """
         try:
             from app.hardware.ghost_engine import calculate_plan
-            from app.hardware.speed_optimizer import speed_options
-            plan = calculate_plan(model, requested_ctx=num_ctx)
-            if plan.warnings:
-                for w in plan.warnings:
-                    logger.warning(f"GhostEngine: {w}")
-            return speed_options(plan.ollama_options)
+            from app.hardware.safety_monitor import get_pressure
+            pressure = get_pressure()
+            # Under critical pressure, cap context
+            if pressure == "critical":
+                num_ctx = min(num_ctx, 2048)
+                logger.warning(f"GhostEngine: critical pressure — capping ctx to {num_ctx}")
+            plan = await calculate_plan(model, requested_ctx=num_ctx, base_url=self.base_url)
+            for w in plan.warnings:
+                logger.warning(f"GhostEngine: {w}")
+            return plan.ollama_options
         except Exception as e:
             logger.debug(f"GhostEngine unavailable: {e}")
             return {"num_ctx": num_ctx}
@@ -63,7 +71,7 @@ class OllamaProvider(BaseProvider):
 
             chosen_model = self.model
             num_ctx = kwargs.get("num_ctx", 8192)
-            ghost_opts = self._get_ghost_options(chosen_model, num_ctx)
+            ghost_opts = await self._get_ghost_options(chosen_model, num_ctx)
             payload = {
                 "model": chosen_model,
                 "messages": chat_messages,
@@ -111,16 +119,31 @@ class OllamaProvider(BaseProvider):
     ):
         """Async generator yielding token strings from Ollama streaming API."""
         chosen_model = model or self.model
-        # Match the ctx the model is already running with — prevents Ollama reload (+30s)
-        from app.hardware.speed_optimizer import get_warmed_ctx, KEEP_ALIVE_SECONDS
-        effective_ctx = get_warmed_ctx(chosen_model, fallback=num_ctx)
-        # Minimal options: only num_ctx + keep_alive. Any extra option (num_gpu, num_thread, etc.)
-        # that differs from what Ollama loaded with causes a model reload — costing 30-40s.
-        opts = {
-            "temperature": temperature,
-            "num_ctx": effective_ctx,
-            "keep_alive": KEEP_ALIVE_SECONDS,
-        }
+        from app.hardware.speed_optimizer import get_warmed_ctx, mark_warmed, KEEP_ALIVE_SECONDS
+
+        is_warmed = get_warmed_ctx(chosen_model, fallback=None) is not None
+
+        if is_warmed:
+            # Model already in VRAM — send minimal opts to avoid reload penalty (~30s)
+            effective_ctx = get_warmed_ctx(chosen_model, fallback=num_ctx)
+            opts = {
+                "temperature": temperature,
+                "num_ctx": effective_ctx,
+                "keep_alive": KEEP_ALIVE_SECONDS,
+            }
+        else:
+            # First load — use Ghost Engine for optimal GPU split + context
+            ghost_opts    = await self._get_ghost_options(chosen_model, num_ctx)
+            effective_ctx = ghost_opts.get("num_ctx", num_ctx)
+            opts = {
+                "temperature": temperature,
+                "keep_alive": KEEP_ALIVE_SECONDS,
+                **ghost_opts,
+            }
+            logger.info(
+                f"GhostEngine initial load: {chosen_model} "
+                f"gpu_layers={ghost_opts.get('num_gpu','?')} ctx={effective_ctx}"
+            )
         chat_messages = [{"role": m.role, "content": m.content} for m in messages]
         payload = {
             "model": chosen_model,
@@ -138,15 +161,20 @@ class OllamaProvider(BaseProvider):
                     if resp.status != 200:
                         yield f"[Error {resp.status} from Ollama]"
                         return
+                    first_token = True
+                    import json
                     async for line in resp.content:
                         line = line.strip()
                         if not line:
                             continue
-                        import json
                         try:
                             data = json.loads(line)
                             token = data.get("message", {}).get("content", "")
                             if token:
+                                if first_token and not is_warmed:
+                                    # Model loaded successfully — register in warmed dict
+                                    mark_warmed(chosen_model, effective_ctx)
+                                    first_token = False
                                 yield token
                             if data.get("done"):
                                 return

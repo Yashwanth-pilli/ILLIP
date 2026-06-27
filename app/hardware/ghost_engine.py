@@ -1,295 +1,425 @@
 """
-Ghost GPU Engine — auto-calculates optimal model loading for any hardware.
+Ghost GPU Engine v2 — dynamic model optimizer.
 
-Problem: Big model + small GPU = crash or slow.
-Solution: Split layers between GPU/CPU, quantize, offload KV cache.
+Zero hardcoding. Queries Ollama /api/show for real architecture data.
+Falls back to name-based estimation only when Ollama is offline.
 
-Works on any laptop. Students with 4GB GPU can run 7B.
-Students with 8GB GPU can run 13-14B.
-Students with 16GB RAM only (no GPU) can run 7B on CPU.
+Pipeline:
+  1. get_model_profile()   — real params/quant/layers from Ollama
+  2. calculate_plan()      — VRAM split: full_gpu / kv_offload / hybrid / cpu_only
+  3. find_draft_model()    — pick smallest installed model for speculative decoding
+  4. GhostPlan             — ollama_options dict ready to pass to /api/chat
 """
 
+import re
+import asyncio
+import aiohttp
 from dataclasses import dataclass, field
 from typing import Optional
-from app.hardware.detector import get_hardware_info
 from app.utils import logger
 
-# Model size database (VRAM needed for full GPU load, Q4_K_M quantized)
-# format: {model_name: (param_billions, vram_gb_q4, layers)}
-_MODEL_DB: dict[str, tuple[float, float, int]] = {
-    "qwen2.5:1.5b":  (1.5,  1.1,  28),
-    "qwen2.5:3b":    (3.0,  2.0,  36),
-    "qwen2.5:7b":    (7.0,  4.7,  28),
-    "qwen2.5:14b":   (14.0, 9.0,  48),
-    "qwen2.5:32b":   (32.0, 20.0, 64),
-    "qwen2.5:72b":   (72.0, 43.0, 80),
-    "llama3.1:8b":   (8.0,  5.0,  32),
-    "llama3.1:70b":  (70.0, 40.0, 80),
-    "mistral:7b":    (7.0,  4.1,  32),
-    "phi3:mini":     (3.8,  2.3,  32),
-    "phi3:medium":   (14.0, 8.5,  40),
-    "gemma2:2b":     (2.0,  1.6,  26),
-    "gemma2:9b":     (9.0,  5.5,  42),
-    "gemma2:27b":    (27.0, 16.0, 46),
-}
+# Safety buffers — never use all VRAM/RAM
+_VRAM_SAFETY_GB = 1.0   # reserve for driver + OS
+_RAM_SAFETY_GB  = 2.0   # reserve for OS
+_TEMP_HARD_LIMIT = 85   # °C — refuse to increase load above this
 
-# Safety buffer: keep this much VRAM free for OS + driver overhead
-_VRAM_SAFETY_GB = 1.2
-_RAM_SAFETY_GB  = 2.0
+
+@dataclass
+class ModelProfile:
+    name: str
+    param_billions: float
+    quantization: str          # e.g. "Q4_K_M"
+    bits_per_param: float      # derived from quant
+    num_layers: int
+    vram_needed_gb: float      # full GPU load estimate
+    source: str                # "ollama_live" | "name_estimate"
 
 
 @dataclass
 class GhostPlan:
     model: str
-    gpu_layers: int          # layers loaded to GPU
-    cpu_layers: int          # layers offloaded to CPU RAM
+    strategy: str              # full_gpu | kv_offload | hybrid | cpu_only
+    gpu_layers: int
+    cpu_layers: int
     total_layers: int
     vram_used_gb: float
     ram_used_gb: float
-    use_kv_offload: bool     # offload KV cache to CPU between tokens
-    use_mmap: bool           # memory-map weights (OS pages on demand)
-    use_mlock: bool          # lock weights in RAM (no swap thrashing)
-    threads: int             # CPU threads for CPU layers
-    context_limit: int       # safe context given available memory
-    strategy: str            # "full_gpu" | "hybrid" | "cpu_only"
+    context_limit: int
+    threads: int
     feasible: bool
     warnings: list[str] = field(default_factory=list)
     ollama_options: dict = field(default_factory=dict)
+    draft_model: Optional[str] = None   # set if speculative decoding available
 
 
-async def _fetch_model_info(model: str, base_url: str = "http://localhost:11434") -> tuple[float, float, int] | None:
+# Quantization → bits per weight
+_QUANT_BITS: dict[str, float] = {
+    "Q2_K":   2.5,  "Q3_K_S": 3.0,  "Q3_K_M": 3.35, "Q3_K_L": 3.5,
+    "Q4_0":   4.0,  "Q4_K_S": 4.0,  "Q4_K_M": 4.5,  "Q4_1":   4.5,
+    "Q5_0":   5.0,  "Q5_K_S": 5.0,  "Q5_K_M": 5.5,  "Q5_1":   5.0,
+    "Q6_K":   6.0,  "Q8_0":   8.0,
+    "F16":   16.0,  "FP16":  16.0,
+    "F32":   32.0,  "BF16":  16.0,
+}
+
+
+async def get_model_profile(model: str, base_url: str = "http://localhost:11434") -> ModelProfile:
     """
-    Ask Ollama for real model architecture info.
-    Returns (param_billions, vram_q4_gb, num_layers) or None if unavailable.
+    Query Ollama /api/show for real model architecture.
+    Falls back to name-based estimation if Ollama unreachable.
     """
     try:
-        import aiohttp, re
         async with aiohttp.ClientSession() as s:
             async with s.post(
                 f"{base_url}/api/show",
                 json={"name": model},
-                timeout=aiohttp.ClientTimeout(total=5),
+                timeout=aiohttp.ClientTimeout(total=8),
             ) as resp:
                 if resp.status != 200:
-                    return None
+                    raise ValueError(f"Ollama /api/show returned {resp.status}")
                 data = await resp.json()
 
-        details = data.get("details", {})
-        param_str = details.get("parameter_size", "")   # e.g. "7B", "70.6B"
-        quant     = details.get("quantization_level", "Q4_K_M")
+        details   = data.get("details", {})
+        model_info = data.get("model_info", {})
 
-        # Parse param count
+        # Parameter count
+        param_str = details.get("parameter_size", "") or ""
         m = re.search(r"([\d.]+)\s*[Bb]", param_str)
-        if not m:
-            return None
-        param_b = float(m.group(1))
+        param_b = float(m.group(1)) if m else _estimate_params_from_name(model)
 
-        # Bits per param from quantization
-        quant_bits = {
-            "Q2_K": 2.5, "Q3_K_S": 3.0, "Q3_K_M": 3.35, "Q3_K_L": 3.5,
-            "Q4_0": 4.0, "Q4_K_S": 4.0, "Q4_K_M": 4.5, "Q5_K_M": 5.5,
-            "Q6_K": 6.0, "Q8_0": 8.0, "F16": 16.0, "F32": 32.0,
-        }.get(quant, 4.5)
+        # Quantization
+        quant = details.get("quantization_level", "") or "Q4_K_M"
+        bits  = _QUANT_BITS.get(quant, 4.5)
 
-        vram_gb = round(param_b * quant_bits / 8 * 1.1, 2)   # +10% overhead
-
-        # Estimate layers from param count (standard transformer scaling)
-        layers = max(16, int(param_b * 1.1))
-
-        # Try to get exact layer count from modelinfo
-        info = data.get("model_info", {})
-        for key in info:
-            if "num_hidden_layers" in key or "n_layer" in key:
+        # Layer count — read from model_info keys (architecture-agnostic)
+        num_layers = 0
+        for key, val in model_info.items():
+            if any(k in key for k in ("num_hidden_layers", "n_layer", "n_layers", "num_layers")):
                 try:
-                    layers = int(info[key])
+                    num_layers = int(val)
                     break
                 except Exception:
                     pass
+        if not num_layers:
+            num_layers = _estimate_layers(param_b)
 
-        return (param_b, vram_gb, layers)
-    except Exception:
-        return None
+        # VRAM = params * bits/8 * 1.12 overhead (KV cache not included here)
+        vram_gb = round(param_b * bits / 8 * 1.12, 2)
 
-
-def calculate_plan(model: str, requested_ctx: int = 8192) -> GhostPlan:
-    """
-    Given a model name and desired context, return the optimal loading plan
-    for the current hardware. Works for any laptop — degrades gracefully.
-    """
-    hw = get_hardware_info()
-    info = _MODEL_DB.get(model)
-    warnings = []
-
-    if info is None:
-        # Unknown model — estimate from name (sync fallback, Ollama not queried here)
-        param_b = _guess_params(model)
-        vram_q4 = param_b * 0.67   # rough Q4_K_M estimate
-        total_layers = max(28, int(param_b * 1.1))
-        info = (param_b, vram_q4, total_layers)
-        warnings.append(
-            f"Model '{model}' not in local DB — using parameter estimates. "
-            "Accuracy improves when Ollama is running (live query via /api/show)."
+        return ModelProfile(
+            name=model,
+            param_billions=param_b,
+            quantization=quant,
+            bits_per_param=bits,
+            num_layers=num_layers,
+            vram_needed_gb=vram_gb,
+            source="ollama_live",
         )
 
-    param_b, vram_needed_gb, total_layers = info
-    avail_vram = max(0.0, hw.gpu_vram_gb - _VRAM_SAFETY_GB)
-    avail_ram  = max(0.0, hw.ram_available_gb - _RAM_SAFETY_GB)
+    except Exception as e:
+        logger.debug(f"GhostEngine: /api/show failed for {model}: {e} — using name estimate")
+        return _profile_from_name(model)
 
-    # Context window costs VRAM/RAM for KV cache
-    # Rough estimate: 0.5MB per token per layer for 7B, scales with params
-    ctx_vram_gb = (requested_ctx * total_layers * 0.0000005 * (param_b / 7.0))
 
-    # Strategy 1: Full GPU
-    if vram_needed_gb + ctx_vram_gb <= avail_vram:
-        gpu_layers = total_layers
+def _estimate_params_from_name(name: str) -> float:
+    """Extract param count from model name e.g. qwen2.5:7b → 7.0"""
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[bB]", name)
+    return float(m.group(1)) if m else 7.0
+
+
+def _estimate_layers(param_b: float) -> int:
+    """Estimate transformer layer count from param count (standard scaling)."""
+    # Approximate: llama-style models scale layers roughly as param^0.45 * 5
+    return max(16, int(param_b ** 0.45 * 5))
+
+
+def _profile_from_name(model: str) -> ModelProfile:
+    """Build ModelProfile from name alone — used when Ollama offline."""
+    param_b    = _estimate_params_from_name(model)
+    bits       = 4.5   # assume Q4_K_M — most common
+    num_layers = _estimate_layers(param_b)
+    vram_gb    = round(param_b * bits / 8 * 1.12, 2)
+    return ModelProfile(
+        name=model,
+        param_billions=param_b,
+        quantization="Q4_K_M (estimated)",
+        bits_per_param=bits,
+        num_layers=num_layers,
+        vram_needed_gb=vram_gb,
+        source="name_estimate",
+    )
+
+
+async def list_installed_models(base_url: str = "http://localhost:11434") -> list[dict]:
+    """
+    Returns list of installed models with name + size info.
+    Each dict: {name, size_gb, param_billions (estimated)}
+    """
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(
+                f"{base_url}/api/tags",
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status != 200:
+                    return []
+                data = await resp.json()
+        models = []
+        for m in data.get("models", []):
+            name    = m.get("name", "")
+            size_b  = m.get("size", 0)
+            size_gb = round(size_b / 1e9, 2)
+            param_b = _estimate_params_from_name(name)
+            models.append({"name": name, "size_gb": size_gb, "param_billions": param_b})
+        return sorted(models, key=lambda x: x["param_billions"])
+    except Exception:
+        return []
+
+
+async def find_draft_model(
+    target_model: str,
+    base_url: str = "http://localhost:11434",
+) -> Optional[str]:
+    """
+    Find the best draft model for speculative decoding.
+    Rules:
+    - Must be smaller than target (ideally <30% of target params)
+    - Must be different model
+    - Returns None if target is already small or no good draft exists
+    """
+    target_params = _estimate_params_from_name(target_model)
+    if target_params < 7.0:
+        return None   # target already small, speculation not worth it
+
+    installed = await list_installed_models(base_url)
+    candidates = [
+        m for m in installed
+        if m["name"] != target_model
+        and m["param_billions"] <= target_params * 0.3   # <30% of target size
+        and m["param_billions"] >= 1.0                   # at least 1B (too tiny = bad drafts)
+    ]
+    if not candidates:
+        return None
+    # Pick largest of the candidates (best draft quality while still fast)
+    return max(candidates, key=lambda x: x["param_billions"])["name"]
+
+
+async def calculate_plan(
+    model: str,
+    requested_ctx: int = 8192,
+    base_url: str = "http://localhost:11434",
+) -> GhostPlan:
+    """
+    Main entry point. Returns GhostPlan with ollama_options ready for /api/chat.
+    Works for any model on any hardware — no hardcoding.
+    """
+    from app.hardware.guard import read_hardware_state_async
+    from app.hardware.detector import get_hardware_info
+
+    hw_state  = await read_hardware_state_async()
+    hw        = get_hardware_info()
+    profile   = await get_model_profile(model, base_url)
+
+    warnings: list[str] = []
+
+    if profile.source == "name_estimate":
+        warnings.append(
+            f"Ollama offline — using name-based estimate for {model}. "
+            "Start Ollama for accurate planning."
+        )
+
+    # Safety: refuse to increase GPU load if already hot
+    if hw_state.gpu_temp_c >= _TEMP_HARD_LIMIT:
+        warnings.append(
+            f"GPU at {hw_state.gpu_temp_c}°C — forcing CPU-only to prevent damage."
+        )
+        return _cpu_only_plan(profile, hw, requested_ctx, warnings)
+
+    avail_vram_gb = max(0.0, (hw.gpu_vram_gb or 0.0) - _VRAM_SAFETY_GB)
+    avail_ram_gb  = max(0.0, (hw.ram_available_gb or 4.0) - _RAM_SAFETY_GB)
+    safe_threads  = max(2, (hw.cpu_cores or 4) - 2)
+
+    # KV cache VRAM cost (per-layer, per-token, float16)
+    # Formula: 2 (K+V) * num_layers * hidden_dim * bytes / GB
+    # We approximate hidden_dim from param count: hidden ≈ 128 * sqrt(params_M)
+    params_m    = profile.param_billions * 1000
+    hidden_dim  = int(128 * (params_m ** 0.5))
+    kv_per_token_per_layer_bytes = 2 * hidden_dim * 2  # 2=K+V, 2=fp16
+    kv_total_gb = (
+        requested_ctx * profile.num_layers * kv_per_token_per_layer_bytes / 1e9
+    )
+
+    # ── Strategy 1: Full GPU (model + KV fit in VRAM) ──
+    if profile.vram_needed_gb + kv_total_gb <= avail_vram_gb:
+        strategy   = "full_gpu"
+        gpu_layers = profile.num_layers
         cpu_layers = 0
-        strategy = "full_gpu"
-        vram_used = vram_needed_gb + ctx_vram_gb
-        ram_used = 0.1
+        vram_used  = profile.vram_needed_gb + kv_total_gb
+        ram_used   = 0.1
+        context    = requested_ctx
         kv_offload = False
-        context = requested_ctx
 
-    # Strategy 2: KV cache offload to CPU (saves VRAM, model still fits)
-    elif vram_needed_gb <= avail_vram:
-        gpu_layers = total_layers
+    # ── Strategy 2: KV offload (model fits but KV cache doesn't) ──
+    elif profile.vram_needed_gb <= avail_vram_gb:
+        strategy   = "kv_offload"
+        gpu_layers = profile.num_layers
         cpu_layers = 0
-        strategy = "full_gpu_kv_offload"
-        vram_used = vram_needed_gb
-        ram_used = ctx_vram_gb
+        vram_used  = profile.vram_needed_gb
+        ram_used   = kv_total_gb
         kv_offload = True
-        context = min(requested_ctx, int(avail_ram / (ctx_vram_gb / max(requested_ctx, 1)) * 1024))
-        warnings.append("KV cache offloaded to CPU RAM. Slightly slower but fits in VRAM.")
-
-    # Strategy 3: Hybrid split — some layers GPU, rest CPU
-    elif avail_vram > 0.5:
-        vram_per_layer = vram_needed_gb / total_layers
-        gpu_layers = max(1, int(avail_vram / vram_per_layer))
-        cpu_layers = total_layers - gpu_layers
-        strategy = "hybrid"
-        vram_used = gpu_layers * vram_per_layer
-        ram_per_layer = vram_needed_gb / total_layers
-        ram_used = cpu_layers * ram_per_layer + ctx_vram_gb
-        kv_offload = True
-
-        if ram_used > avail_ram:
-            # Reduce context to fit
-            ctx_budget = max(0, avail_ram - cpu_layers * ram_per_layer)
-            context = max(512, int(ctx_budget / (ctx_vram_gb / max(requested_ctx, 1))))
+        # Max context = how many tokens fit in available RAM
+        max_ctx_by_ram = int(
+            avail_ram_gb * 1e9
+            / (profile.num_layers * kv_per_token_per_layer_bytes)
+        ) if profile.num_layers > 0 else requested_ctx
+        context = min(requested_ctx, max(512, max_ctx_by_ram))
+        if context < requested_ctx:
             warnings.append(
-                f"RAM tight — context reduced to {context} tokens. "
-                "Close other apps for more capacity."
+                f"KV cache needs {kv_total_gb:.1f}GB RAM — context reduced to {context}. "
+                "Close other apps for more."
+            )
+        else:
+            warnings.append("KV cache offloaded to CPU RAM. Slightly slower but model stays on GPU.")
+
+    # ── Strategy 3: Hybrid split (partial GPU, rest on CPU) ──
+    elif avail_vram_gb > 0.5:
+        strategy        = "hybrid"
+        vram_per_layer  = profile.vram_needed_gb / profile.num_layers
+        gpu_layers      = max(1, int(avail_vram_gb / vram_per_layer))
+        cpu_layers      = profile.num_layers - gpu_layers
+        vram_used       = gpu_layers * vram_per_layer
+        ram_per_cpu_lay = vram_per_layer   # similar size
+        ram_used        = cpu_layers * ram_per_cpu_lay + kv_total_gb
+        kv_offload      = True
+
+        if ram_used > avail_ram_gb:
+            # Shrink context to fit in RAM
+            ram_for_kv  = max(0.1, avail_ram_gb - cpu_layers * ram_per_cpu_lay)
+            max_ctx_ram = int(
+                ram_for_kv * 1e9
+                / (profile.num_layers * kv_per_token_per_layer_bytes)
+            ) if profile.num_layers > 0 else 512
+            context  = max(512, min(requested_ctx, max_ctx_ram))
+            ram_used = cpu_layers * ram_per_cpu_lay + (
+                context * profile.num_layers * kv_per_token_per_layer_bytes / 1e9
+            )
+            warnings.append(
+                f"RAM tight — context reduced to {context}. Close other apps."
             )
         else:
             context = requested_ctx
 
-        gpu_pct = int(gpu_layers / total_layers * 100)
+        gpu_pct = int(gpu_layers / profile.num_layers * 100)
         warnings.append(
-            f"Hybrid mode: {gpu_pct}% of layers on GPU, rest on CPU. "
-            "Expect ~2-4x slower than full GPU. Still works."
+            f"Hybrid: {gpu_pct}% layers on GPU, {100-gpu_pct}% on CPU. "
+            f"Expect {100 - gpu_pct}% speed reduction vs full GPU."
         )
 
-    # Strategy 4: CPU only
+    # ── Strategy 4: CPU only ──
     else:
-        gpu_layers = 0
-        cpu_layers = total_layers
-        strategy = "cpu_only"
-        vram_used = 0.0
-        ram_used = vram_needed_gb + ctx_vram_gb
-        kv_offload = False
-        context = min(requested_ctx, 2048)
-        warnings.append(
-            "No GPU available or VRAM too small. Running on CPU. "
-            "Expect slow responses. Consider a smaller model."
-        )
+        return _cpu_only_plan(profile, hw, requested_ctx, warnings)
 
-    feasible = ram_used <= (hw.ram_gb - _RAM_SAFETY_GB) or strategy in ("full_gpu", "full_gpu_kv_offload")
+    feasible = ram_used <= avail_ram_gb or strategy in ("full_gpu", "kv_offload")
     if not feasible:
         warnings.append(
-            f"WARNING: Not enough RAM ({hw.ram_gb}GB) for {model}. "
-            f"Need ~{ram_used:.1f}GB. Use a smaller/more quantized model."
+            f"Not enough RAM ({hw.ram_available_gb:.0f}GB free) for {model}. "
+            f"Need ~{ram_used:.1f}GB. Use a smaller model."
         )
 
-    safe_threads = max(2, (hw.cpu_cores or 4) - 2)
-
-    # Build Ollama options dict — pass directly to /api/chat
+    # Ollama options — passed to /api/chat on FIRST load only
     ollama_options = {
-        "num_gpu":     gpu_layers,     # layers on GPU (0 = CPU only)
-        "num_thread":  safe_threads,   # CPU threads
-        "num_ctx":     context,        # context window
-        "use_mmap":    True,           # memory-mapped weights (OS pages on demand)
-        "use_mlock":   strategy in ("full_gpu", "cpu_only"),  # lock if fits
+        "num_gpu":    gpu_layers,
+        "num_thread": safe_threads,
+        "num_ctx":    context,
+        "use_mmap":   True,
+        # mlock: only lock if fits fully in GPU (no CPU layers competing for RAM)
+        "use_mlock":  cpu_layers == 0 and ram_used < avail_ram_gb,
     }
+
+    # Find draft model for speculative decoding (async, non-blocking)
+    try:
+        draft = await find_draft_model(model, base_url)
+    except Exception:
+        draft = None
 
     plan = GhostPlan(
         model=model,
+        strategy=strategy,
         gpu_layers=gpu_layers,
         cpu_layers=cpu_layers,
-        total_layers=total_layers,
+        total_layers=profile.num_layers,
         vram_used_gb=round(vram_used, 2),
         ram_used_gb=round(ram_used, 2),
-        use_kv_offload=kv_offload,
-        use_mmap=True,
-        use_mlock=ollama_options["use_mlock"],
-        threads=safe_threads,
         context_limit=context,
-        strategy=strategy,
+        threads=safe_threads,
         feasible=feasible,
         warnings=warnings,
         ollama_options=ollama_options,
+        draft_model=draft,
     )
 
     logger.info(
-        f"GhostEngine: {model} | strategy={strategy} | "
-        f"gpu_layers={gpu_layers}/{total_layers} | "
-        f"VRAM={vram_used:.1f}GB | RAM={ram_used:.1f}GB | ctx={context}"
+        f"GhostEngine: {model} ({profile.param_billions}B {profile.quantization}) | "
+        f"strategy={strategy} | gpu={gpu_layers}/{profile.num_layers} layers | "
+        f"VRAM={vram_used:.1f}GB | ctx={context}"
+        + (f" | draft={draft}" if draft else "")
     )
     return plan
 
 
-async def calculate_plan_async(model: str, requested_ctx: int = 8192, base_url: str = "http://localhost:11434") -> GhostPlan:
+def _cpu_only_plan(profile: ModelProfile, hw, requested_ctx: int, warnings: list[str]) -> GhostPlan:
+    safe_threads = max(2, (hw.cpu_cores or 4) - 2)
+    warnings.append(
+        "Running on CPU only. Expect slow responses (~1-3 tok/s). "
+        "Consider a smaller/more quantized model."
+    )
+    return GhostPlan(
+        model=profile.name,
+        strategy="cpu_only",
+        gpu_layers=0,
+        cpu_layers=profile.num_layers,
+        total_layers=profile.num_layers,
+        vram_used_gb=0.0,
+        ram_used_gb=profile.vram_needed_gb,
+        context_limit=min(requested_ctx, 2048),
+        threads=safe_threads,
+        feasible=True,
+        warnings=warnings,
+        ollama_options={
+            "num_gpu":    0,
+            "num_thread": safe_threads,
+            "num_ctx":    min(requested_ctx, 2048),
+            "use_mmap":   True,
+            "use_mlock":  False,
+        },
+        draft_model=None,
+    )
+
+
+async def recommend_model(base_url: str = "http://localhost:11434") -> Optional[str]:
     """
-    Like calculate_plan() but queries Ollama /api/show for real architecture.
-    Use this for any model not in _MODEL_DB. Falls back to sync estimate if Ollama unreachable.
+    From installed Ollama models, pick the best one current hardware can run fully on GPU.
+    Falls back to largest hybrid-feasible model.
+    No hardcoded model names — reads installed models dynamically.
     """
-    live_info = await _fetch_model_info(model, base_url)
-    if live_info is not None:
-        param_b, vram_gb, num_layers = live_info
-        # Temporarily inject into DB so calculate_plan() picks it up
-        _MODEL_DB[model] = (param_b, vram_gb, num_layers)
-    return calculate_plan(model, requested_ctx)
+    from app.hardware.detector import get_hardware_info
+    hw         = get_hardware_info()
+    avail_vram = max(0.0, (hw.gpu_vram_gb or 0.0) - _VRAM_SAFETY_GB)
+    avail_ram  = max(0.0, (hw.ram_available_gb or 4.0) - _RAM_SAFETY_GB)
+    installed  = await list_installed_models(base_url)
 
+    if not installed:
+        return None
 
-def _guess_params(model_name: str) -> float:
-    """Estimate param count from model name string."""
-    import re
-    m = re.search(r'(\d+(?:\.\d+)?)\s*[bB]', model_name)
-    if m:
-        return float(m.group(1))
-    return 7.0  # default guess
+    # Prefer models that fit entirely in GPU VRAM
+    for m in reversed(installed):   # largest first
+        profile = await get_model_profile(m["name"], base_url)
+        if profile.vram_needed_gb <= avail_vram:
+            return m["name"]
 
+    # Fall back: largest that fits in RAM for hybrid/CPU
+    for m in reversed(installed):
+        if m["size_gb"] <= avail_ram:
+            return m["name"]
 
-def recommend_model_for_hardware() -> str:
-    """Pick the best model the hardware can run at full quality."""
-    hw = get_hardware_info()
-    avail_vram = max(0.0, hw.gpu_vram_gb - _VRAM_SAFETY_GB)
-    avail_ram  = max(0.0, hw.ram_available_gb - _RAM_SAFETY_GB)
-
-    # Prefer fitting entirely in VRAM for best speed
-    candidates = [
-        ("qwen2.5:72b", 43.0),
-        ("qwen2.5:32b", 20.0),
-        ("qwen2.5:14b", 9.0),
-        ("qwen2.5:7b",  4.7),
-        ("qwen2.5:3b",  2.0),
-        ("qwen2.5:1.5b", 1.1),
-    ]
-    for name, vram_needed in candidates:
-        if vram_needed <= avail_vram:
-            return name
-
-    # Nothing fits in VRAM — pick what fits in RAM for CPU/hybrid
-    for name, vram_needed in candidates:
-        if vram_needed <= avail_ram:
-            return name
-
-    return "qwen2.5:1.5b"
+    return installed[0]["name"]   # smallest available
