@@ -292,17 +292,19 @@ async def _cmd_start(update, context):
         await update.message.reply_text(
             f"ILLIP AI connected! You are owner (ID: {user_id}).\n\n"
             "Commands:\n"
-            "/image <prompt> — generate image (free)\n"
-            "/run <code>     — execute Python\n"
-            "/search <query> — web search\n"
-            "/calc <expr>    — calculator\n"
-            "/agent <task>   — run AI agent on task\n"
-            "/model [name]   — show or switch model\n"
-            "/status         — system status\n"
-            "/refresh        — reset stuck context\n"
-            "/skills         — list skills\n"
-            "/allow <id>     — add user\n"
-            "/help           — this message\n\n"
+            "/image <prompt>  — generate image (free)\n"
+            "/remember <text> — save to memory\n"
+            "/recall <query>  — search memory\n"
+            "/memories        — list all memories\n"
+            "/run <code>      — execute Python\n"
+            "/search <query>  — web search\n"
+            "/calc <expr>     — calculator\n"
+            "/agent <task>    — run AI agent on task\n"
+            "/model [name]    — show or switch model\n"
+            "/status          — system status\n"
+            "/refresh         — reset stuck context\n"
+            "/allow <id>      — add user\n"
+            "/help            — this message\n\n"
             "Or just send any message to chat with ILLIP."
         )
     else:
@@ -412,6 +414,81 @@ async def _cmd_search(update, context):
         await msg.edit_text(result[:4000], parse_mode="Markdown")
     except Exception:
         await msg.edit_text(result[:4000])
+
+
+async def _cmd_remember(update, context):
+    """Explicitly save something to Memory Ball: /remember [type] name | description | body"""
+    if not _is_allowed(update.effective_user.id):
+        return
+    raw = update.message.text or ""
+    text = raw[len("/remember"):].strip()
+    if not text:
+        await update.message.reply_text(
+            "Usage: /remember <what to remember>\n"
+            "Example: /remember I prefer short Python code over verbose Java-style\n\n"
+            "Or with type: /remember [feedback] prefer-short | I prefer short code | User corrected me to use shorter code."
+        )
+        return
+
+    from app.services.memory_ball import save_memory, auto_extract
+    from app.providers import get_provider
+    from app.core import Message
+
+    # Quick extract via LLM
+    msg = await update.message.reply_text("💾 Saving to memory...")
+    try:
+        saved = await auto_extract(text, "User explicitly asked to remember this.")
+        if saved:
+            await msg.edit_text(f"✅ Saved {saved} memory entry(s) to Memory Ball.")
+        else:
+            # Fallback: store as plain fact
+            ok = save_memory(
+                name=text[:40].lower().replace(" ", "-"),
+                mem_type="fact",
+                description=text[:100],
+                body=text,
+            )
+            await msg.edit_text("✅ Saved to memory." if ok else "❌ Save failed.")
+    except Exception as e:
+        await msg.edit_text(f"Save error: {e}")
+
+
+async def _cmd_recall(update, context):
+    """Search Memory Ball: /recall <query>"""
+    if not _is_allowed(update.effective_user.id):
+        return
+    query = " ".join(context.args) if context.args else ""
+    if not query:
+        raw = update.message.text or ""
+        query = raw[len("/recall"):].strip()
+    if not query:
+        await update.message.reply_text("Usage: /recall <query>")
+        return
+
+    from app.services.memory_ball import search as ball_search
+    results = ball_search(query, limit=5)
+    if not results:
+        await update.message.reply_text(f"No memories found for: {query}")
+        return
+    lines = [f"🧠 Memories for '{query}':\n"]
+    for r in results:
+        lines.append(f"[{r['type']}] *{r['name']}*\n{r.get('description','')}\n{r.get('body','')[:200]}\n")
+    try:
+        await update.message.reply_text("\n".join(lines)[:4000], parse_mode="Markdown")
+    except Exception:
+        await update.message.reply_text("\n".join(lines)[:4000])
+
+
+async def _cmd_memories(update, context):
+    """List all Memory Ball entries."""
+    if not _is_allowed(update.effective_user.id):
+        return
+    from app.services.memory_ball import get_index_summary
+    summary = get_index_summary()
+    try:
+        await update.message.reply_text(summary[:4000], parse_mode="Markdown")
+    except Exception:
+        await update.message.reply_text(summary[:4000])
 
 
 async def _cmd_image(update, context):
@@ -731,7 +808,10 @@ async def start_bot(token: str) -> None:
     _app.add_handler(CommandHandler("run",     _cmd_run))
     _app.add_handler(CommandHandler("search",  _cmd_search))
     _app.add_handler(CommandHandler("calc",    _cmd_calc))
-    _app.add_handler(CommandHandler("image",   _cmd_image))
+    _app.add_handler(CommandHandler("image",    _cmd_image))
+    _app.add_handler(CommandHandler("remember", _cmd_remember))
+    _app.add_handler(CommandHandler("recall",   _cmd_recall))
+    _app.add_handler(CommandHandler("memories", _cmd_memories))
     _app.add_handler(CommandHandler("agent",   _cmd_agent))
     _app.add_handler(CommandHandler("model",   _cmd_model))
     _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))

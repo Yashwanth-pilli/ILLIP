@@ -39,6 +39,15 @@ async def _reflexion_observe(question: str, response: str, base_url: str) -> Non
         logger.debug(f"Reflexion observe error (non-critical): {e}")
 
 
+async def _ball_extract(user_msg: str, assistant_msg: str) -> None:
+    """Fire-and-forget: extract structured named memories from conversation turn."""
+    try:
+        from app.services.memory_ball import auto_extract
+        await auto_extract(user_msg, assistant_msg)
+    except Exception as e:
+        logger.debug(f"Memory Ball extract (non-critical): {e}")
+
+
 async def _learning_ingest(user_msg: str, assistant_msg: str) -> None:
     """Fire-and-forget: run chat exchange through swarm learning pipeline."""
     try:
@@ -151,6 +160,18 @@ async def stream_chat_message(request: ChatRequest):
     memory_ctx = format_memories_for_prompt(memories)
     search_ctx = format_search_results(search_res) if search_res else ""
 
+    # Inject structured Memory Ball context (named, typed memories)
+    try:
+        from app.services.memory_ball import search as ball_search, format_for_prompt as ball_fmt
+        ball_hits = await asyncio.get_event_loop().run_in_executor(
+            None, ball_search, request.message, None, 4
+        )
+        if ball_hits:
+            ball_ctx = ball_fmt(ball_hits)
+            memory_ctx = (memory_ctx + "\n\n" + ball_ctx).strip() if memory_ctx else ball_ctx
+    except Exception:
+        pass
+
     raw_history = chat_service._get_history(project_id)
     from app.services.chat_service import _load_system_prompt
     from app.services.router_service import SMALL as _small_model
@@ -248,6 +269,10 @@ async def stream_chat_message(request: ChatRequest):
                 {"category": "chat", "complexity": routing["complexity"]},
                 project_id=project_id,
             )
+        )
+        # Memory Ball: extract + store named structured memories from this turn
+        asyncio.create_task(
+            _ball_extract(request.message, full)
         )
         # Auto-feed into learning pipeline (observe -> clean -> label -> verify)
         asyncio.create_task(_learning_ingest(request.message, full))
