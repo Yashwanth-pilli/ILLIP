@@ -26,10 +26,14 @@ _MODEL_PRIORITY = [
 
 
 def _pick_groq_model(requested: str | None = None) -> str:
-    """Pick a Groq model. Respects user override, falls back to best available."""
+    """Pick a Groq model. Ignores Ollama model names (e.g. qwen2.5:3b)."""
     import os
     env_model = os.environ.get("GROQ_MODEL", "")
-    return requested or env_model or _MODEL_PRIORITY[0]
+    candidate = requested or env_model or _MODEL_PRIORITY[0]
+    # Ollama models contain ":" (e.g. qwen2.5:3b) — reject them
+    if candidate and ":" in candidate:
+        candidate = env_model or _MODEL_PRIORITY[0]
+    return candidate
 
 
 class GroqProvider(BaseProvider):

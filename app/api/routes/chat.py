@@ -104,6 +104,12 @@ async def stream_chat_message(request: ChatRequest):
     routing = await route(request.message, ceiling_model=request.model)
     chosen_model  = routing["model"]
     ctx_limit     = routing["context_limit"]
+
+    provider      = await get_provider()
+    # When Groq is active, replace Ollama model names with Groq model
+    if hasattr(provider, 'model') and ":" in chosen_model:
+        chosen_model = provider.model
+
     _active_model = chosen_model
 
     # force_search: user toggled search button OR router detected live-data need
@@ -111,7 +117,6 @@ async def stream_chat_message(request: ChatRequest):
 
     project_id   = request.project_id or "default"
     chat_service = get_chat_service()
-    provider     = await get_provider()
 
     is_simple = routing["complexity"] == "simple"
 
