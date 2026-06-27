@@ -31,8 +31,10 @@ class ModelProfile:
     quantization: str          # e.g. "Q4_K_M"
     bits_per_param: float      # derived from quant
     num_layers: int
-    vram_needed_gb: float      # full GPU load estimate
+    vram_needed_gb: float      # model weights VRAM only
     source: str                # "ollama_live" | "name_estimate"
+    hidden_size: int = 0       # embedding dim (from Ollama model_info)
+    kv_heads: int = 0          # GQA KV head count
 
 
 @dataclass
@@ -79,22 +81,26 @@ async def get_model_profile(model: str, base_url: str = "http://localhost:11434"
                     raise ValueError(f"Ollama /api/show returned {resp.status}")
                 data = await resp.json()
 
-        details   = data.get("details", {})
+        details    = data.get("details", {})
         model_info = data.get("model_info", {})
 
-        # Parameter count
-        param_str = details.get("parameter_size", "") or ""
-        m = re.search(r"([\d.]+)\s*[Bb]", param_str)
-        param_b = float(m.group(1)) if m else _estimate_params_from_name(model)
+        # Exact param count from general.parameter_count (most accurate)
+        exact_params = model_info.get("general.parameter_count")
+        if exact_params:
+            param_b = round(int(exact_params) / 1e9, 3)
+        else:
+            param_str = details.get("parameter_size", "") or ""
+            m = re.search(r"([\d.]+)\s*[Bb]", param_str)
+            param_b = float(m.group(1)) if m else _estimate_params_from_name(model)
 
         # Quantization
         quant = details.get("quantization_level", "") or "Q4_K_M"
         bits  = _QUANT_BITS.get(quant, 4.5)
 
-        # Layer count — read from model_info keys (architecture-agnostic)
+        # Layer count — Ollama stores as "{arch}.block_count" (e.g. qwen2.block_count)
         num_layers = 0
         for key, val in model_info.items():
-            if any(k in key for k in ("num_hidden_layers", "n_layer", "n_layers", "num_layers")):
+            if key.endswith(".block_count"):
                 try:
                     num_layers = int(val)
                     break
@@ -103,7 +109,27 @@ async def get_model_profile(model: str, base_url: str = "http://localhost:11434"
         if not num_layers:
             num_layers = _estimate_layers(param_b)
 
-        # VRAM = params * bits/8 * 1.12 overhead (KV cache not included here)
+        # Hidden size for accurate KV cache calc — "{arch}.embedding_length"
+        hidden_size = 0
+        for key, val in model_info.items():
+            if key.endswith(".embedding_length"):
+                try:
+                    hidden_size = int(val)
+                    break
+                except Exception:
+                    pass
+
+        # KV head count — "{arch}.attention.head_count_kv" (GQA support)
+        kv_heads = 0
+        for key, val in model_info.items():
+            if key.endswith(".attention.head_count_kv"):
+                try:
+                    kv_heads = int(val)
+                    break
+                except Exception:
+                    pass
+
+        # Model weight VRAM (no KV cache here — calculated separately in calculate_plan)
         vram_gb = round(param_b * bits / 8 * 1.12, 2)
 
         return ModelProfile(
@@ -114,6 +140,8 @@ async def get_model_profile(model: str, base_url: str = "http://localhost:11434"
             num_layers=num_layers,
             vram_needed_gb=vram_gb,
             source="ollama_live",
+            hidden_size=hidden_size or 0,
+            kv_heads=kv_heads or 0,
         )
 
     except Exception as e:
@@ -239,12 +267,26 @@ async def calculate_plan(
     avail_ram_gb  = max(0.0, (hw.ram_available_gb or 4.0) - _RAM_SAFETY_GB)
     safe_threads  = max(2, (hw.cpu_cores or 4) - 2)
 
-    # KV cache VRAM cost (per-layer, per-token, float16)
-    # Formula: 2 (K+V) * num_layers * hidden_dim * bytes / GB
-    # We approximate hidden_dim from param count: hidden ≈ 128 * sqrt(params_M)
-    params_m    = profile.param_billions * 1000
-    hidden_dim  = int(128 * (params_m ** 0.5))
-    kv_per_token_per_layer_bytes = 2 * hidden_dim * 2  # 2=K+V, 2=fp16
+    # KV cache VRAM cost — accurate when Ollama provides hidden_size + kv_heads
+    # Formula: 2(K+V) × kv_heads × head_dim × seq_len × 2bytes(fp16) × layers
+    if profile.hidden_size > 0 and profile.kv_heads > 0:
+        # Real values from model_info (GQA-aware)
+        # head_dim = hidden_size / total_attn_heads — approximated as hidden/16 default
+        # Since we have kv_heads, use: KV size = 2 × kv_heads × (hidden/kv_heads) × 2
+        # = 2 × hidden_size × 2 / (total_heads/kv_heads) ... simplest: 2 × kv_heads × head_dim × 2
+        # head_dim not directly available, estimate as hidden_size / max(kv_heads * 4, 16)
+        estimated_total_heads = max(profile.kv_heads * 4, 8)
+        head_dim = profile.hidden_size // estimated_total_heads
+        kv_per_token_per_layer_bytes = 2 * profile.kv_heads * head_dim * 2
+    elif profile.hidden_size > 0:
+        # Have hidden size but not kv_heads — use full MHA estimate
+        kv_per_token_per_layer_bytes = 2 * profile.hidden_size * 2
+    else:
+        # Fallback: rough estimate from param count (less accurate)
+        params_m    = profile.param_billions * 1000
+        hidden_dim  = int(64 * (params_m ** 0.4))   # conservative estimate
+        kv_per_token_per_layer_bytes = 2 * hidden_dim * 2
+
     kv_total_gb = (
         requested_ctx * profile.num_layers * kv_per_token_per_layer_bytes / 1e9
     )
