@@ -1,0 +1,45 @@
+{
+  "comment": "Continue.dev config — paste into ~/.continue/config.json",
+  "comment2": "This gives you GitHub Copilot-style inline completions powered by ILLIP/Ollama",
+  "models": [
+    {
+      "title": "ILLIP AI (Qwen 7B)",
+      "provider": "ollama",
+      "model": "qwen2.5:7b",
+      "apiBase": "http://localhost:11434",
+      "contextLength": 8192,
+      "systemMessage": "You are ILLIP AI, a private local coding assistant. Give concise, correct code. No explanations unless asked."
+    },
+    {
+      "title": "ILLIP AI (Qwen 14B — better reasoning)",
+      "provider": "ollama",
+      "model": "qwen2.5:14b",
+      "apiBase": "http://localhost:11434",
+      "contextLength": 8192
+    }
+  ],
+  "tabAutocompleteModel": {
+    "title": "ILLIP Autocomplete (Qwen 3B — fast)",
+    "provider": "ollama",
+    "model": "qwen2.5:3b",
+    "apiBase": "http://localhost:11434"
+  },
+  "embeddingsProvider": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "apiBase": "http://localhost:11434"
+  },
+  "slashCommands": [
+    {"name": "edit", "description": "Edit highlighted code"},
+    {"name": "comment", "description": "Add comments"},
+    {"name": "tests", "description": "Write unit tests"},
+    {"name": "explain", "description": "Explain this code"}
+  ],
+  "customCommands": [
+    {
+      "name": "review",
+      "prompt": "Review this code for bugs, security issues, and improvements. Be specific and concise.",
+      "description": "ILLIP code review"
+    }
+  ]
+}

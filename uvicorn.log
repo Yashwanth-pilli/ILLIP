@@ -1,0 +1,51 @@
+2026-06-27 13:49:31 - illip - INFO - Skill registered: calculator
+2026-06-27 13:49:31 - illip - INFO - Skill registered: get_datetime
+2026-06-27 13:49:31 - illip - INFO - Skill registered: web_search
+2026-06-27 13:49:31 - illip - INFO - Skill registered: read_file
+2026-06-27 13:49:31 - illip - INFO - Skill registered: run_python
+2026-06-27 13:49:31 - illip - INFO - Skill registered: read_pdf
+2026-06-27 13:49:31 - illip - INFO - Skill registered: github_search
+2026-06-27 13:49:31 - illip - INFO - Skill registered: install_package
+2026-06-27 13:49:32 - illip - INFO - Database initialized at sqlite:///E:\Projects\ILLIP_AI\data\illip.db
+2026-06-27 13:49:32 - illip - INFO - Database initialized at sqlite:///E:\Projects\ILLIP_AI\data\illip.db
+2026-06-27 13:49:32 - illip - INFO - ILLIP AI starting up...
+2026-06-27 13:49:32 - illip - INFO - Configuration: ollama
+2026-06-27 13:49:32 - illip - INFO - Telegram bot queued for startup
+2026-06-27 13:49:33 - illip - INFO - Telegram bot starting (polling)...
+2026-06-27 13:49:35 - illip - INFO - Telegram bot online
+2026-06-27 13:49:39 - illip - INFO - Hardware: tier=4, RAM=15.3GB, GPU=NVIDIA GeForce RTX 4060 Laptop GPU 8.0GB VRAM, recommended=qwen2.5:7b
+2026-06-27 13:49:39 - illip - INFO - SpeedOptimizer: auto-selected qwen2.5:7b (configured: qwen2.5:3b)
+2026-06-27 13:49:57 - illip - INFO - SpeedOptimizer: pre-warmed qwen2.5:7b
+2026-06-27 13:50:33 - illip - INFO - Telegram /start from user_id=1784050492
+2026-06-27 13:50:33 - illip - INFO - Telegram owner set: 1784050492
+2026-06-27 13:50:58 - illip - INFO - Router: complexity=simple pressure=low search=False -> qwen2.5:3b
+2026-06-27 13:50:58 - illip - INFO - Created provider: ollama
+2026-06-27 13:51:02 - illip - INFO - ContextManager: 975 tokens total | compressed=False | turns=2 raw
+INFO:     127.0.0.1:60016 - "POST /api/chat/stream HTTP/1.1" 200 OK
+2026-06-27 13:51:14 - illip - INFO - Swarm: example approved, labels=['general']
+2026-06-27 13:51:14 - illip - INFO - Learning: approved example saved [881862ca6978] source=chat_auto
+2026-06-27 13:51:25 - illip - INFO - Router: complexity=simple pressure=low search=False -> qwen2.5:3b
+2026-06-27 13:51:25 - illip - INFO - ContextManager: 995 tokens total | compressed=False | turns=4 raw
+INFO:     127.0.0.1:55968 - "POST /api/chat/stream HTTP/1.1" 200 OK
+2026-06-27 13:51:29 - illip - INFO - Reflexion observe: score=2/10 reason="The response provides a direct and concise answer to the question but includes 'How can I help you further?' which is not relevant to the question."
+2026-06-27 13:52:01 - illip - INFO - Swarm: example approved, labels=['general']
+2026-06-27 13:52:01 - illip - INFO - Learning: approved example saved [9c252a252a90] source=chat_auto
+2026-06-27 13:52:20 - illip - INFO - Reflexion observe: score=4/10 reason='Response is concise but lacks directness and could be more focused on the question without unnecessary details.'
+2026-06-27 13:54:32 - illip - INFO - Router: complexity=simple pressure=low search=False -> qwen2.5:3b
+2026-06-27 13:54:32 - illip - INFO - ContextManager: 1206 tokens total | compressed=False | turns=6 raw
+INFO:     127.0.0.1:54845 - "POST /api/chat/stream HTTP/1.1" 200 OK
+2026-06-27 13:54:59 - illip - INFO - Swarm: example approved, labels=['coding']
+2026-06-27 13:54:59 - illip - INFO - Learning: approved example saved [166a718946c3] source=chat_auto
+2026-06-27 13:55:17 - illip - INFO - Reflexion observe: score=6/10 reason='Response is helpful but could be more concise and avoid unnecessary details.'
+2026-06-27 13:56:01 - illip - INFO - Router: complexity=simple pressure=low search=False -> qwen2.5:3b
+2026-06-27 13:56:01 - illip - INFO - ContextManager: 1320 tokens total | compressed=False | turns=8 raw
+INFO:     127.0.0.1:65228 - "POST /api/chat/stream HTTP/1.1" 200 OK
+2026-06-27 13:56:29 - illip - INFO - Swarm: example approved, labels=['general']
+2026-06-27 13:56:29 - illip - INFO - Learning: approved example saved [04012b087577] source=chat_auto
+2026-06-27 13:56:48 - illip - INFO - Reflexion observe: score=4/10 reason='Lacks specific actionable steps and does not directly address the need for logs.'
+2026-06-27 13:57:26 - illip - INFO - Router: complexity=medium pressure=low search=False -> qwen2.5:3b
+2026-06-27 13:57:26 - illip - INFO - ContextManager: 1479 tokens total | compressed=False | turns=10 raw
+INFO:     127.0.0.1:54203 - "POST /api/chat/stream HTTP/1.1" 200 OK
+2026-06-27 13:58:14 - illip - INFO - Swarm: example approved, labels=['general']
+2026-06-27 13:58:14 - illip - INFO - Learning: approved example saved [cab81997e83a] source=chat_auto
+2026-06-27 13:58:34 - illip - INFO - Reflexion observe: score=3/10 reason="Response lacks specific instructions and troubleshooting steps. It also includes unnecessary information like 'as an AI' and does not provide a direct solution to the problem."

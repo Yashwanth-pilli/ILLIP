@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv
+Include/
+Scripts/
+Lib/
+pyvenv.cfg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+data/logs/*
+!data/logs/.gitkeep
+
+# Claude local settings
+.claude/settings.local.json
+
+# Data outputs (personal history, memory — don't commit)
+data/memory/*
+!data/memory/.gitkeep
+data/tasks/*
+!data/tasks/.gitkeep
+data/workspaces/*
+!data/workspaces/.gitkeep
+data/snapshots/*
+!data/snapshots/.gitkeep
+data/projects/
+data/plugins/
+data/learning/
+data/telegram_owner.txt
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.iml

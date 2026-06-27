@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ILLIP AI</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-content">
+                <h1>ILLIP AI</h1>
+                <p class="subtitle">Your AI company, in your device</p>
+            </div>
+
+            <div class="header-center">
+                <select id="projectSelect" class="project-select" onchange="switchProject(this.value)" title="Active project">
+                    <option value="default">📁 Default</option>
+                </select>
+                <button class="icon-btn" onclick="showNewProjectDialog()" title="New project">＋</button>
+            </div>
+
+            <div class="header-status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Checking...</span>
+            </div>
+        </header>
+
+        <!-- Model suggestion banner — shown when better model available -->
+        <div id="modelSuggestion" class="model-suggestion hidden">
+            <span id="modelSuggestionText"></span>
+            <button class="suggestion-btn" id="modelSuggestionBtn" onclick="acceptModelSuggestion()">Use It</button>
+            <button class="suggestion-dismiss" onclick="dismissModelSuggestion()">✕</button>
+        </div>
+
+        <main class="app-main">
+            <section class="chat-section">
+                <div class="chat-container">
+                    <div id="pressureBanner" class="pressure-banner hidden"></div>
+                    <div class="messages" id="messagesContainer"></div>
+
+                    <div class="input-area">
+                        <div class="input-controls">
+                            <span id="modelBadge" class="model-badge" title="Active model — auto-selected by hardware router">🤖 auto</span>
+                            <button id="forceLarge" class="mode-btn" title="Force large model for this message" onclick="toggleForceLarge()">⚡ Boost</button>
+                            <button id="searchToggle" class="mode-btn" title="Force web search" onclick="toggleForceSearch()">🔍 Search</button>
+                            <button id="autoSpeakToggle" class="mode-btn" title="Auto-speak responses" onclick="toggleAutoSpeak()">🔇 Speak</button>
+                            <button class="mode-btn refresh-btn" title="Refresh: clear stuck context, keep all data" onclick="refreshSystem()">↺ Refresh</button>
+                        </div>
+                        <div id="imagePreview" class="image-preview hidden">
+                            <img id="imagePreviewImg" src="" alt="preview">
+                            <button class="remove-image-btn" onclick="clearImage()" title="Remove image">✕</button>
+                        </div>
+                        <form id="chatForm" class="chat-form">
+                            <button type="button" id="micBtn" class="mic-btn" onclick="toggleMic()" title="Record voice message">🎤</button>
+                            <label class="img-btn" title="Attach image for vision analysis">
+                                🖼
+                                <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="onImageSelected(this)">
+                            </label>
+                            <input
+                                type="text"
+                                id="messageInput"
+                                class="message-input"
+                                placeholder="Ask ILLIP anything... attach 🖼 for vision"
+                                autocomplete="off"
+                            >
+                            <button type="submit" class="send-button" id="sendBtn">Send</button>
+                        </form>
+                        <div id="voiceStatus" class="voice-status hidden"></div>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="sidebar">
+                <div class="panel system-panel">
+                    <h3>System</h3>
+                    <div id="systemStatus" class="status-content"><p>Loading...</p></div>
+                </div>
+
+                <div class="panel hardware-panel">
+                    <h3>Hardware</h3>
+                    <div id="hardwareStatus" class="status-content"><p>Loading...</p></div>
+                </div>
+
+                <div class="panel models-panel">
+                    <h3>Models</h3>
+                    <div id="modelsList" class="status-content"><p>Loading...</p></div>
+                </div>
+
+                <div class="panel skills-panel">
+                    <h3>Skills</h3>
+                    <div id="skillsList" class="status-content"><p>Loading...</p></div>
+                </div>
+
+                <div class="panel agents-panel">
+                    <h3>Agents</h3>
+                    <div id="agentsList" class="agents-content"><p>Loading...</p></div>
+                </div>
+
+                <div class="panel plugins-panel">
+                    <div class="panel-header">
+                        <h3>Plugins</h3>
+                        <button class="panel-add-btn" onclick="showPluginDialog()" title="Add connector">＋</button>
+                    </div>
+                    <div id="pluginsList" class="status-content"><p>Loading...</p></div>
+                </div>
+
+                <div class="panel stats-panel">
+                    <h3>Stats</h3>
+                    <div id="statsContent" class="stats-content"><p>Loading...</p></div>
+                </div>
+            </aside>
+        </main>
+
+        <footer class="app-footer">
+            <p>ILLIP AI v3.1 | Local-first · Private · Hardware-aware | <a href="/docs" target="_blank">API Docs</a></p>
+        </footer>
+    </div>
+
+    <!-- Plugin dialog -->
+    <div id="pluginDialog" class="dialog-overlay hidden">
+        <div class="dialog" style="min-width:420px;max-width:560px">
+            <h3>Add Connector / Plugin</h3>
+            <p style="font-size:12px;color:#64748b;margin-bottom:12px">Start from a template or paste your own JSON spec.</p>
+            <select id="pluginTemplate" class="dialog-input" onchange="loadPluginTemplate(this.value)" style="margin-bottom:8px">
+                <option value="">— Pick a template —</option>
+            </select>
+            <textarea id="pluginJson" class="dialog-input" rows="12" style="font-family:monospace;font-size:12px;resize:vertical" placeholder='{"name":"my_api", "plugin_type":"http", "description":"...", "config":{"url":"...", "method":"GET"}, "parameters":{"type":"object","properties":{}}}'></textarea>
+            <div class="dialog-btns">
+                <button onclick="savePlugin()" class="btn-primary">Save & Activate</button>
+                <button onclick="closePluginDialog()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New project dialog -->
+    <div id="newProjectDialog" class="dialog-overlay hidden">
+        <div class="dialog">
+            <h3>New Project</h3>
+            <input type="text" id="newProjectName" class="dialog-input" placeholder="Project name..." />
+            <div class="dialog-btns">
+                <button onclick="createProject()" class="btn-primary">Create</button>
+                <button onclick="closeDialog()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

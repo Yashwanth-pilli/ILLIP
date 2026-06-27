@@ -1,0 +1,16 @@
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+sqlalchemy>=2.0.23
+httpx>=0.28.0
+aiofiles>=23.2.1
+pypdf>=3.17.1
+python-multipart>=0.0.6
+aiohttp>=3.9.0
+psutil>=5.9.0
+ddgs>=9.0.0
+python-telegram-bot>=20.0
+# Optional — only needed locally (GPU/mic), skipped gracefully in cloud
+# faster-whisper>=1.0.0

@@ -1,0 +1,60 @@
+{
+  "name": "illip-ai",
+  "displayName": "ILLIP AI",
+  "description": "Your local AI assistant — ILLIP AI in VS Code",
+  "version": "0.1.0",
+  "publisher": "illip",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["AI", "Chat"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "illip.openChat",
+        "title": "ILLIP AI: Open Chat"
+      },
+      {
+        "command": "illip.explainSelection",
+        "title": "ILLIP AI: Explain Selected Code"
+      },
+      {
+        "command": "illip.askAboutFile",
+        "title": "ILLIP AI: Ask About Current File"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "illip.openChat",
+        "key": "ctrl+shift+i",
+        "mac": "cmd+shift+i"
+      },
+      {
+        "command": "illip.explainSelection",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "ILLIP AI",
+      "properties": {
+        "illip.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "ILLIP AI server URL"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

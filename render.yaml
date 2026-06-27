@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: illip-ai
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/system/status
+    envVars:
+      - key: MODEL_PROVIDER
+        value: auto
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: OLLAMA_BASE_URL
+        value: ""
+    disk:
+      name: illip-data
+      mountPath: /app/data
+      sizeGB: 1
