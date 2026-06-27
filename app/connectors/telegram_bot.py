@@ -84,7 +84,8 @@ def _is_allowed(user_id: int) -> bool:
 
 # ── ILLIP API helpers ─────────────────────────────────────────────────────────
 
-async def _illip_chat(message: str, project_id: str = "default", force_tools: bool = False) -> str:
+async def _illip_chat(message: str, project_id: str = "default", force_tools: bool = False,
+                      force_search: bool = False) -> str:
     """Send message to ILLIP, collect full streamed response."""
     import aiohttp
     url = f"http://127.0.0.1:{settings.api_port}/api/chat/stream"
@@ -93,6 +94,7 @@ async def _illip_chat(message: str, project_id: str = "default", force_tools: bo
         "include_memory": True,
         "project_id": project_id,
         "force_tools": force_tools,
+        "force_search": force_search,
     }
     collected = []
     tool_results = []
@@ -123,6 +125,61 @@ async def _illip_chat(message: str, project_id: str = "default", force_tools: bo
         return reply or "(no response)"
     except Exception as e:
         return f"Connection error: {e}"
+
+
+async def _illip_stream_to_message(message: str, tg_message, project_id: str = "default",
+                                   force_search: bool = False) -> str:
+    """Stream ILLIP response and progressively edit a Telegram message — no freeze."""
+    import aiohttp
+    import time
+    url = f"http://127.0.0.1:{settings.api_port}/api/chat/stream"
+    payload = {
+        "message": message,
+        "include_memory": True,
+        "project_id": project_id,
+        "force_tools": True,
+        "force_search": force_search,
+    }
+    collected = []
+    last_edit = time.monotonic()
+    EDIT_INTERVAL = 2.5  # seconds between edits (Telegram rate limit: 1 edit/sec per message)
+
+    async def _try_edit(text: str):
+        try:
+            await tg_message.edit_text(text[:4000] or "...")
+        except Exception:
+            pass
+
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=180)) as resp:
+                if resp.status != 200:
+                    await _try_edit(f"ILLIP error {resp.status}")
+                    return f"ILLIP error {resp.status}"
+                async for line in resp.content:
+                    line = line.decode().strip()
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        parsed = json.loads(data)
+                        if "token" in parsed:
+                            collected.append(parsed["token"])
+                            now = time.monotonic()
+                            if now - last_edit >= EDIT_INTERVAL and collected:
+                                await _try_edit("".join(collected))
+                                last_edit = now
+                    except Exception:
+                        pass
+    except Exception as e:
+        await _try_edit(f"Connection error: {e}")
+        return f"Connection error: {e}"
+
+    reply = "".join(collected).strip() or "(no response)"
+    await _try_edit(reply)
+    return reply
 
 
 async def _illip_run_skill(skill_name: str, **kwargs) -> str:
@@ -470,36 +527,40 @@ async def _handle_text(update, context):
     text = update.message.text.strip()
     if not text:
         return
-    await context.bot.send_chat_action(update.effective_chat.id, "typing")
+
     chat_id = update.effective_chat.id
+    await context.bot.send_chat_action(chat_id, "typing")
 
-    async def keep_typing():
-        for _ in range(45):
-            await asyncio.sleep(4)
-            try:
-                await context.bot.send_chat_action(chat_id, "typing")
-            except Exception:
-                break
+    # Send placeholder — will be edited progressively as tokens arrive (no freeze)
+    placeholder = await update.message.reply_text("⏳")
 
-    typing_task = asyncio.create_task(keep_typing())
     try:
-        # force_tools=True: always allow skill execution from Telegram
         reply = await asyncio.wait_for(
-            _illip_chat(text, force_tools=True),
+            _illip_stream_to_message(text, placeholder, force_search=True),
             timeout=180,
         )
     except asyncio.TimeoutError:
         reply = "ILLIP took too long. Try /refresh and ask again."
+        try:
+            await placeholder.edit_text(reply)
+        except Exception:
+            pass
+        return
     except Exception as e:
         reply = f"Error: {e}"
-    finally:
-        typing_task.cancel()
-
-    for chunk in _split_message(reply):
         try:
-            await update.message.reply_text(chunk, parse_mode="Markdown")
+            await placeholder.edit_text(reply)
         except Exception:
-            await update.message.reply_text(chunk)
+            pass
+        return
+
+    # If reply is long, send overflow as extra messages (placeholder already has first 4000)
+    if len(reply) > 4000:
+        for chunk in _split_message(reply[4000:]):
+            try:
+                await update.message.reply_text(chunk, parse_mode="Markdown")
+            except Exception:
+                await update.message.reply_text(chunk)
 
 
 async def _handle_photo(update, context):
