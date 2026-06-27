@@ -5,11 +5,23 @@ Chat endpoints
 import json
 import asyncio
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse as _StreamingResponse
 from app.core import ChatRequest, ChatResponse, Message
 from app.services import get_chat_service
 from app.providers import get_provider
 from app.utils import logger, get_current_timestamp
+
+
+class StreamingResponse(_StreamingResponse):
+    """Bypass anyio task group — crashes on Python 3.14 (current_task()=None)."""
+    async def __call__(self, scope, receive, send):
+        try:
+            await self.stream_response(send)
+        except OSError:
+            from starlette.exceptions import ClientDisconnect
+            raise ClientDisconnect()
+        if self.background is not None:
+            await self.background()
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -125,23 +137,19 @@ async def stream_chat_message(request: ChatRequest):
     if is_simple:
         ctx_limit = get_warmed_ctx(chosen_model, fallback=ctx_limit)
 
-    # Fast path: simple queries skip memory retrieval + history compression
-    # "hi", "thanks", short factual → 2-4s instead of 8-15s
-    if is_simple and not do_search:
-        memory_ctx = ""
-        search_ctx = ""
-        memories   = []
-    else:
-        memories_task = asyncio.create_task(
-            retrieve_memory(request.message, top_k=3, project_id=project_id)
-        )
-        search_task = asyncio.create_task(
-            web_search(request.message, max_results=4)
-        ) if do_search else None
-        memories   = await memories_task
-        search_res = await search_task if search_task else []
-        memory_ctx = format_memories_for_prompt(memories)
-        search_ctx = format_search_results(search_res) if search_res else ""
+    # Memory retrieval: always run (even simple queries benefit from context)
+    # Search: only when needed
+    memories_task = asyncio.create_task(
+        retrieve_memory(request.message, top_k=4, project_id=project_id)
+    )
+    search_task = asyncio.create_task(
+        web_search(request.message, max_results=4)
+    ) if do_search else None
+
+    memories   = await memories_task
+    search_res = await search_task if search_task else []
+    memory_ctx = format_memories_for_prompt(memories)
+    search_ctx = format_search_results(search_res) if search_res else ""
 
     raw_history = chat_service._get_history(project_id)
     from app.services.chat_service import _load_system_prompt
@@ -149,11 +157,12 @@ async def stream_chat_message(request: ChatRequest):
     system_prompt = _load_system_prompt()
 
     if is_simple:
-        # Fast path: last 3 turns only, no compression call, no memory enrichment
-        recent = [{"role": m.role, "content": m.content} for m in raw_history[-6:]
+        # Fast path: last 4 turns + inject any retrieved memories into system prompt
+        recent = [{"role": m.role, "content": m.content} for m in raw_history[-8:]
                   if m.role in ("user", "assistant")]
+        sys_content = system_prompt + (f"\n\n{memory_ctx}" if memory_ctx else "")
         messages = (
-            [Message(role="system", content=system_prompt, timestamp=ts())]
+            [Message(role="system", content=sys_content, timestamp=ts())]
             + [Message(role=m["role"], content=m["content"], timestamp=ts()) for m in recent]
             + [Message(role="user", content=request.message, timestamp=ts())]
         )

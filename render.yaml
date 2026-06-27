@@ -6,11 +6,17 @@ services:
     healthCheckPath: /api/system/status
     envVars:
       - key: MODEL_PROVIDER
-        value: auto
+        value: openrouter
+      - key: OPENROUTER_API_KEY
+        sync: false          # paste in Render dashboard → Environment
+      - key: OPENROUTER_MODEL
+        value: meta-llama/llama-3.1-8b-instruct:free
       - key: GROQ_API_KEY
-        sync: false
+        sync: false          # optional fallback
       - key: TELEGRAM_BOT_TOKEN
-        sync: false
+        sync: false          # paste in Render dashboard → Environment
+      - key: TELEGRAM_ALLOWED_USERS
+        value: ""
       - key: OLLAMA_BASE_URL
         value: ""
     disk:

@@ -2,12 +2,13 @@
 Provider factory — auto-selects best available LLM backend.
 
 Priority:
-  1. Ollama (local GPU) — if reachable
-  2. Groq  (cloud free) — if GROQ_API_KEY set
-  3. Mock  (dev only)   — fallback
+  1. Ollama      (local GPU) — if reachable
+  2. OpenRouter  (cloud, 200+ models, free tier) — if OPENROUTER_API_KEY set
+  3. Groq        (cloud, fast, free tier) — if GROQ_API_KEY set
+  4. Mock        (dev only) — fallback
 
-Set MODEL_PROVIDER=ollama/groq/auto in .env.
-"auto" picks Ollama when running, falls to Groq when laptop is off.
+Set MODEL_PROVIDER=ollama/openrouter/groq/auto in .env.
+"auto" picks Ollama when running, falls to OpenRouter/Groq when PC is off.
 """
 
 import os
@@ -25,6 +26,7 @@ _provider_name: str = ""
 async def _make_provider() -> BaseProvider:
     mode = (os.environ.get("MODEL_PROVIDER") or settings.model_provider or "auto").lower()
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    or_key   = os.environ.get("OPENROUTER_API_KEY", "").strip()
 
     if mode == "groq":
         if not groq_key:
@@ -32,6 +34,13 @@ async def _make_provider() -> BaseProvider:
         from app.providers.groq_provider import GroqProvider
         logger.info("Provider: Groq (forced)")
         return GroqProvider(groq_key)
+
+    if mode == "openrouter":
+        if not or_key:
+            raise RuntimeError("MODEL_PROVIDER=openrouter but OPENROUTER_API_KEY not set in .env")
+        from app.providers.openrouter_provider import OpenRouterProvider
+        logger.info("Provider: OpenRouter (forced)")
+        return OpenRouterProvider(or_key)
 
     if mode == "ollama":
         p = OllamaProvider()
@@ -42,19 +51,23 @@ async def _make_provider() -> BaseProvider:
             logger.info("Provider: Ollama (local GPU)")
         return p
 
-    # auto: try Ollama first, fall back to Groq
+    # auto: Ollama → OpenRouter → Groq → Mock
     ollama = OllamaProvider()
-    ok = await ollama.health_check()
-    if ok:
+    if await ollama.health_check():
         logger.info("Provider: Ollama (auto-selected, GPU active)")
         return ollama
 
+    if or_key:
+        from app.providers.openrouter_provider import OpenRouterProvider
+        logger.info("Provider: OpenRouter (auto-fallback — Ollama not reachable)")
+        return OpenRouterProvider(or_key)
+
     if groq_key:
         from app.providers.groq_provider import GroqProvider
-        logger.info("Provider: Groq (auto-fallback — Ollama not reachable)")
+        logger.info("Provider: Groq (auto-fallback — Ollama + OpenRouter not available)")
         return GroqProvider(groq_key)
 
-    logger.warning("Provider: Mock (no Ollama, no GROQ_API_KEY — set one in .env)")
+    logger.warning("Provider: Mock (no Ollama, no OPENROUTER_API_KEY, no GROQ_API_KEY)")
     return MockProvider()
 
 
@@ -62,12 +75,11 @@ async def get_provider() -> BaseProvider:
     """Return active provider, re-checking if Ollama came back online."""
     global _provider, _provider_name
 
-    # Re-check on every call if in auto mode — handles laptop coming back online
     mode = (os.environ.get("MODEL_PROVIDER") or settings.model_provider or "auto").lower()
-    if mode == "auto" and _provider_name == "groq":
+    if mode == "auto" and _provider_name in ("openrouter", "groq"):
         ollama = OllamaProvider()
         if await ollama.health_check():
-            logger.info("Provider: Ollama back online — switching from Groq")
+            logger.info("Provider: Ollama back online — switching from cloud")
             _provider = ollama
             _provider_name = "ollama"
             return _provider
@@ -88,9 +100,10 @@ def reset_provider():
 class ProviderFactory:
     @classmethod
     def list_providers(cls) -> list:
-        key = os.environ.get("GROQ_API_KEY", "")
         available = ["ollama"]
-        if key:
+        if os.environ.get("OPENROUTER_API_KEY", ""):
+            available.append("openrouter")
+        if os.environ.get("GROQ_API_KEY", ""):
             available.append("groq")
         available.append("mock")
         return available

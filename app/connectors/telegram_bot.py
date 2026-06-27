@@ -598,7 +598,12 @@ async def start_bot(token: str) -> None:
     global _app, _running, _allowed_users
     _allowed_users = _load_allowed()
 
-    from telegram.ext import Application, CommandHandler, MessageHandler, filters
+    try:
+        from telegram.ext import Application, CommandHandler, MessageHandler, filters
+    except Exception as _tg_err:
+        import traceback
+        logger.error(f"Telegram import failed: {_tg_err}\n{traceback.format_exc()}")
+        return
     _app = (
         Application.builder()
         .token(token)
