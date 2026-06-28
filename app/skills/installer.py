@@ -38,6 +38,7 @@ class InstallResult:
     temp_path: str | None = None
     prompt: str = ""
     error: str = ""
+    validation: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +48,7 @@ class InstallResult:
             "temp_path": self.temp_path,
             "prompt": self.prompt,
             "error": self.error,
+            "validation": self.validation,
         }
 
 
@@ -87,7 +89,9 @@ def _find_and_register_classes(mod: types.ModuleType) -> list[str]:
 
 
 async def _install_raw_file(url: str) -> InstallResult:
-    """Fetch a single .py file, exec in memory, register. Zero disk write."""
+    """Fetch a single .py file, validate, exec in memory, register. Zero disk write."""
+    from app.skills.validator import validate_code
+
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as c:
             r = await c.get(url)
@@ -97,24 +101,39 @@ async def _install_raw_file(url: str) -> InstallResult:
         return InstallResult(installed=False, error=f"Fetch failed: {e}")
 
     mod_name = Path(url.split("?")[0]).stem
+
+    # Safety gate — block dangerous code before exec
+    vr = await validate_code(code, source_name=mod_name)
+    if vr.blocked:
+        return InstallResult(
+            installed=False,
+            error=f"Safety blocked: {vr.blocked_reason}",
+            validation=vr.to_dict(),
+        )
+
     mod = types.ModuleType(mod_name)
     mod.__name__ = "__exec__"
     try:
         exec(compile(code, url, "exec"), mod.__dict__)  # noqa: S102
     except Exception as e:
-        return InstallResult(installed=False, error=f"Exec failed: {e}")
+        return InstallResult(installed=False, error=f"Exec failed: {e}", validation=vr.to_dict())
 
     sys.modules[mod_name] = mod
     names = _find_and_register_classes(mod)
 
     if not names:
-        return InstallResult(installed=False, error="No BaseSKill or BaseConnector subclass found in file.")
+        return InstallResult(
+            installed=False,
+            error="No BaseSKill or BaseConnector subclass found in file.",
+            validation=vr.to_dict(),
+        )
 
     return InstallResult(
         installed=True,
         names=names,
         cleanup_needed=False,
         prompt=f"Skill/connector '{', '.join(names)}' integrated from URL. No files saved to disk.",
+        validation=vr.to_dict(),
     )
 
 
@@ -212,9 +231,13 @@ async def _install_github_repo(repo_url: str) -> InstallResult:
     except Exception:
         pass  # requirements.txt optional
 
-    # Step 3: fetch + exec each .py file in memory
+    # Step 3: fetch + validate + exec each .py file in memory
+    from app.skills.validator import validate_code
+
     registered: list[str] = []
     errors: list[str] = []
+    all_warnings: list[str] = []
+    blocked_files: list[str] = []
 
     async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
         for item in py_files:
@@ -228,6 +251,15 @@ async def _install_github_repo(repo_url: str) -> InstallResult:
                 continue
 
             mod_name = Path(item["path"]).stem
+
+            # Safety gate per file — skip dangerous files, don't abort whole repo
+            vr = await validate_code(code, source_name=mod_name)
+            if vr.blocked:
+                blocked_files.append(f"{item['path']}: {vr.blocked_reason}")
+                logger.warning(f"Blocked file in {owner}/{repo}: {item['path']} — {vr.blocked_reason}")
+                continue
+            all_warnings.extend(vr.warnings)
+
             mod = types.ModuleType(mod_name)
             mod.__name__ = "__exec__"
             try:
@@ -238,19 +270,36 @@ async def _install_github_repo(repo_url: str) -> InstallResult:
             except Exception as e:
                 errors.append(f"{item['path']}: exec failed ({e})")
 
+    # If ALL files were blocked, hard fail
+    if not registered and blocked_files:
+        return InstallResult(
+            installed=False,
+            error=f"All files blocked by safety scan: {'; '.join(blocked_files[:3])}",
+            validation={"blocked_files": blocked_files, "warnings": all_warnings},
+        )
+
     if not registered:
         err_detail = "; ".join(errors[:3]) if errors else "no BaseSKill/BaseConnector subclass found"
         return InstallResult(installed=False, error=f"Nothing registered. {err_detail}")
 
+    warn_summary = f" {len(all_warnings)} warning(s)." if all_warnings else ""
+    blocked_summary = f" {len(blocked_files)} file(s) blocked by safety scan." if blocked_files else ""
+
     return InstallResult(
         installed=True,
         names=registered,
-        cleanup_needed=False,  # no disk used — nothing to clean up
+        cleanup_needed=False,
         prompt=(
             f"'{', '.join(registered)}' integrated from {owner}/{repo} — "
-            f"fully in memory, zero disk used. "
+            f"fully in memory, zero disk used.{warn_summary}{blocked_summary} "
             f"Add persist=true to save to data/connectors/ for auto-load on restart."
         ),
+        validation={
+            "warnings": all_warnings,
+            "blocked_files": blocked_files,
+            "files_scanned": len(py_files),
+            "files_registered": len(registered),
+        },
     )
 
 
