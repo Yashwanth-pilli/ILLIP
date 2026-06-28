@@ -7,16 +7,20 @@ from app.agents.builder_agent import BuilderAgent
 from app.agents.reviewer_agent import ReviewerAgent
 from app.agents.tester_agent import TesterAgent
 from app.agents.memory_agent import MemoryAgent
+from app.agents.specialist_agents import (
+    ResearchAgent, CodeAgent, WriterAgent, AnalystAgent, SummarizerAgent,
+    TranslatorAgent, SchedulerAgent, QAAgent, DataAgent, EmailAgent,
+)
 from app.utils import logger
 
 
 class AgentRegistry:
     """Create and expose the starter agents used by the API."""
-    
+
     def __init__(self):
         self.agents: Dict[str, BaseAgent] = {}
         self._initialize_agents()
-    
+
     def _initialize_agents(self):
         """Instantiate each built-in agent once at startup."""
         agents = [
@@ -25,6 +29,16 @@ class AgentRegistry:
             ReviewerAgent(),
             TesterAgent(),
             MemoryAgent(),
+            ResearchAgent(),
+            CodeAgent(),
+            WriterAgent(),
+            AnalystAgent(),
+            SummarizerAgent(),
+            TranslatorAgent(),
+            SchedulerAgent(),
+            QAAgent(),
+            DataAgent(),
+            EmailAgent(),
         ]
         
         for agent in agents:

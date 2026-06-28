@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#667eea">
     <title>ILLIP AI</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -25,6 +29,7 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">Checking...</span>
             </div>
+            <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle panels">☰</button>
         </header>
 
         <!-- Model suggestion banner — shown when better model available -->

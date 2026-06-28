@@ -10,6 +10,16 @@ let _forceSearch = false;
 let _activeProject = 'default';
 let _suggestedModel = null;   // from hardware recommendation
 
+// ── Mobile sidebar toggle ─────────────────────────────────────────────────────
+
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const btn     = document.getElementById('sidebarToggle');
+    if (!sidebar) return;
+    const open = sidebar.classList.toggle('open');
+    if (btn) btn.textContent = open ? '✕' : '☰';
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 function init() {

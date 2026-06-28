@@ -826,6 +826,67 @@ def _split_message(text: str, limit: int = 4000) -> list[str]:
     return chunks
 
 
+# ── Voice TTS ─────────────────────────────────────────────────────────────────
+
+async def _cmd_speak(update, context):
+    """/speak <text> — convert text to speech, send as voice note."""
+    if not _is_allowed(update.effective_user.id):
+        return
+    text = " ".join(context.args).strip() if context.args else ""
+    if not text:
+        await update.message.reply_text("Usage: /speak <text>")
+        return
+    msg = await update.message.reply_text("🔊 Generating audio...")
+    try:
+        from app.services.voice_tts import speak
+        audio_path = await speak(text)
+        with open(audio_path, "rb") as f:
+            await update.message.reply_voice(voice=f)
+        await msg.delete()
+        import os
+        try:
+            os.unlink(audio_path)
+        except Exception:
+            pass
+    except RuntimeError as e:
+        await msg.edit_text(f"❌ TTS failed: {e}")
+    except Exception as e:
+        logger.error(f"TTS command error: {e}")
+        await msg.edit_text("❌ Voice generation failed.")
+
+
+# ── Self-update ────────────────────────────────────────────────────────────────
+
+async def _cmd_update(update, context):
+    """/update — check and pull latest code from GitHub, then restart."""
+    if not _is_allowed(update.effective_user.id):
+        return
+    msg = await update.message.reply_text("🔍 Checking for updates...")
+    try:
+        from app.services.self_update import check_update, pull_update, restart_server
+        status = await check_update()
+        if status["up_to_date"]:
+            await msg.edit_text(
+                f"✅ Already up to date.\nCommit: `{status['local']}`",
+                parse_mode="Markdown",
+            )
+            return
+        await msg.edit_text(
+            f"⬇️ New version found!\nLocal: `{status['local']}`\nRemote: `{status['remote']}`\nPulling...",
+            parse_mode="Markdown",
+        )
+        output = await pull_update()
+        await msg.edit_text(
+            f"✅ Updated!\n```\n{output[:800]}\n```\nRestarting...",
+            parse_mode="Markdown",
+        )
+        await asyncio.sleep(1)
+        restart_server()
+    except Exception as e:
+        logger.error(f"Self-update error: {e}")
+        await msg.edit_text(f"❌ Update failed: {e}")
+
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 async def start_bot(token: str) -> None:
@@ -859,6 +920,8 @@ async def start_bot(token: str) -> None:
     _app.add_handler(CommandHandler("memories", _cmd_memories))
     _app.add_handler(CommandHandler("agent",   _cmd_agent))
     _app.add_handler(CommandHandler("model",   _cmd_model))
+    _app.add_handler(CommandHandler("speak",   _cmd_speak))
+    _app.add_handler(CommandHandler("update",  _cmd_update))
     _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
     _app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO,   _handle_voice))
     _app.add_handler(MessageHandler(filters.PHOTO,                   _handle_photo))

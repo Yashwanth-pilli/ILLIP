@@ -19,10 +19,30 @@ from app.api.routes import (
     voice,
     plugins,
     telegram,
+    governance,
+    twin,
+    monitoring,
+    storage,
+    webhooks,
+    integrations,
 )
+
+# n8n, whatsapp routes — import separately (may not exist yet)
+try:
+    from app.api.routes import n8n as n8n_routes
+    _has_n8n = True
+except ImportError:
+    _has_n8n = False
+
+try:
+    from app.api.routes import whatsapp as whatsapp_routes
+    _has_whatsapp = True
+except ImportError:
+    _has_whatsapp = False
 
 api_router = APIRouter(prefix="/api")
 
+# Core
 api_router.include_router(health.router)
 api_router.include_router(chat.router)
 api_router.include_router(tasks.router)
@@ -38,3 +58,16 @@ api_router.include_router(self_dev.router)
 api_router.include_router(voice.router)
 api_router.include_router(plugins.router)
 api_router.include_router(telegram.router)
+
+# New layers
+api_router.include_router(governance.router)
+api_router.include_router(twin.router)
+api_router.include_router(monitoring.router)
+api_router.include_router(storage.router)
+api_router.include_router(webhooks.router)
+api_router.include_router(integrations.router)
+
+if _has_n8n:
+    api_router.include_router(n8n_routes.router)
+if _has_whatsapp:
+    api_router.include_router(whatsapp_routes.router)

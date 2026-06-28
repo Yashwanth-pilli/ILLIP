@@ -33,22 +33,46 @@ async def lifespan(app: FastAPI):
     from app.hardware.speed_optimizer import warmup_on_startup
     logger.info("ILLIP AI starting up...")
     logger.info(f"Configuration: {settings.model_provider}")
+
     # Start GPU safety monitor
     from app.hardware.safety_monitor import start_monitor
     start_monitor()
-    # Pre-warm default model in background so first user message is fast
+
+    # Start observability metrics collector
+    from app.monitoring.collector import get_metrics_collector
+    asyncio.create_task(get_metrics_collector().start())
+
+    # Pre-warm default model in background
     asyncio.create_task(warmup_on_startup(settings.ollama_model, settings.ollama_base_url))
+
     # Start Telegram bot if token is configured
     if settings.telegram_bot_token:
         from app.connectors.telegram_bot import start_bot
         asyncio.create_task(start_bot(settings.telegram_bot_token))
         logger.info("Telegram bot queued for startup")
+
+    # Start all connectors (Discord, Slack, Email, n8n, WhatsApp, user-dropped)
+    from app.connectors.registry import get_connector_registry
+    registry = get_connector_registry()
+    asyncio.create_task(registry.start_all())
+    logger.info("Connector registry starting all configured connectors")
+
     yield
+
     logger.info("ILLIP AI shutting down...")
-    # Stop Telegram bot on shutdown
+
+    # Stop all connectors
+    from app.connectors.registry import get_connector_registry
+    await get_connector_registry().stop_all()
+
+    # Stop Telegram bot
     if settings.telegram_bot_token:
         from app.connectors.telegram_bot import stop_bot
         await stop_bot()
+
+    # Stop metrics collector
+    from app.monitoring.collector import get_metrics_collector
+    await get_metrics_collector().stop()
 
 
 # Create FastAPI app with lifespan handler

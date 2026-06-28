@@ -14,14 +14,23 @@ body {
         sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
+    min-height: -webkit-fill-available;
     color: #333;
+    overscroll-behavior: none; /* prevent iOS bounce on body */
 }
 
 .app-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    /* iOS Safari 100vh fix — falls back gracefully */
+    height: 100dvh;
+    height: 100vh;           /* legacy fallback */
     background: #f5f5f5;
+}
+
+/* iOS fill-available workaround */
+@supports (-webkit-touch-callout: none) {
+    .app-container { height: -webkit-fill-available; }
 }
 
 /* ============================================================
@@ -187,7 +196,7 @@ body {
     padding: 12px 16px;
     border: 1px solid #e2e8f0;
     border-radius: 4px;
-    font-size: 14px;
+    font-size: 16px; /* 16px+ prevents iOS auto-zoom on focus */
     font-family: inherit;
     transition: border-color 0.2s;
 }
@@ -332,64 +341,181 @@ body {
 }
 
 /* ============================================================
-   Responsive Design
+   Sidebar toggle (mobile-only button)
+   ============================================================ */
+
+.sidebar-toggle {
+    display: none;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.sidebar-toggle:hover { background: rgba(255,255,255,0.35); }
+
+/* ============================================================
+   Responsive — Tablet (1024px)
    ============================================================ */
 
 @media (max-width: 1024px) {
-    .app-main {
-        flex-direction: column;
-        gap: 15px;
-        padding: 15px;
-    }
-
-    .sidebar {
-        width: 100%;
-        flex-direction: row;
-        overflow-x: auto;
-    }
-
-    .sidebar > .panel {
-        min-width: 250px;
-        flex-shrink: 0;
-    }
-}
-
-@media (max-width: 640px) {
-    .app-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 15px 20px;
-    }
-
-    .header-status {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
     .app-main {
         flex-direction: column;
         gap: 12px;
         padding: 12px;
     }
 
-    .message-content {
-        max-width: 90%;
+    .sidebar {
+        width: 100%;
+        flex-direction: row;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 4px;
+    }
+
+    .sidebar::-webkit-scrollbar { display: none; }
+
+    .sidebar > .panel {
+        min-width: 240px;
+        flex-shrink: 0;
+    }
+}
+
+/* ============================================================
+   Responsive — Mobile (768px)
+   ============================================================ */
+
+@media (max-width: 768px) {
+    /* Header: compact two-row layout */
+    .app-header {
+        padding: 10px 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: max(10px, env(safe-area-inset-top));
+    }
+
+    .header-content h1 { font-size: 20px; margin-bottom: 0; }
+    .header-content .subtitle { display: none; }
+
+    .header-center { flex: 1; }
+    .project-select { max-width: 160px; font-size: 12px; padding: 4px 8px; }
+
+    .header-status { font-size: 12px; gap: 6px; }
+    .sidebar-toggle { display: flex; align-items: center; justify-content: center; }
+
+    /* Sidebar: hidden by default on mobile, toggled via JS */
+    .sidebar {
+        width: 100%;
+        flex-direction: row;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease, padding 0.3s ease;
+        padding: 0;
+        gap: 10px;
+    }
+
+    .sidebar.open {
+        max-height: 300px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 4px;
+    }
+
+    .sidebar > .panel { min-width: 220px; flex-shrink: 0; }
+
+    /* Input controls: wrap to two rows */
+    .input-controls {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .model-badge { font-size: 0.72rem; padding: 4px 8px; }
+
+    .mode-btn {
+        font-size: 11px;
+        padding: 4px 10px;
+    }
+
+    /* Chat form: two-row layout on narrow phones */
+    .chat-form {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .message-input {
+        /* Take full width below mic/img/send row */
+        order: -1;
+        flex: 1 1 100%;
+        font-size: 16px; /* prevent iOS zoom-on-focus */
+        border-radius: 8px;
+    }
+
+    .mic-btn, .img-btn {
+        flex-shrink: 0;
+        padding: 10px 12px;
     }
 
     .send-button {
-        padding: 10px 16px;
-        font-size: 12px;
+        flex-shrink: 0;
+        padding: 10px 18px;
+        font-size: 13px;
+        margin-left: auto;
     }
 
-    .sidebar {
-        width: 100%;
-        flex-direction: column;
+    .message-content {
+        max-width: 88%;
+        font-size: 14px;
     }
 
-    .sidebar > .panel {
-        min-width: auto;
+    /* Dialogs: full-width with margin */
+    .dialog {
+        min-width: unset;
+        width: calc(100vw - 24px);
+        max-width: 480px;
+        padding: 18px;
     }
+
+    /* Input area bottom safe area for iPhone home bar */
+    .input-area {
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+
+    /* Footer: hide on mobile (saves space) */
+    .app-footer { display: none; }
+
+    /* Main: no gap at top */
+    .app-main { padding: 8px; gap: 8px; }
+}
+
+/* ============================================================
+   Responsive — Small phones (480px)
+   ============================================================ */
+
+@media (max-width: 480px) {
+    .app-header {
+        padding: 8px 10px;
+        padding-top: max(8px, env(safe-area-inset-top));
+    }
+
+    .header-content h1 { font-size: 18px; }
+
+    .input-controls { gap: 4px; }
+    .mode-btn { font-size: 10px; padding: 3px 8px; }
+    .model-badge { font-size: 0.68rem; padding: 3px 6px; }
+
+    .messages { padding: 12px; gap: 8px; }
+
+    .message-content { max-width: 92%; font-size: 13px; padding: 10px 12px; }
+
+    .input-area { padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 }
 
 /* ============================================================
