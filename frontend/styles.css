@@ -1342,3 +1342,7 @@ sup.cite { color: #818cf8; font-size: 10px; font-weight: 700; cursor: default; }
     line-height: 1.6;
 }
 .browser-result-text { white-space: pre-wrap; }
+
+.research-step-plan       { color: #93c5fd; font-weight: 600; }
+.research-step-plan-item  { color: #60a5fa; padding-left: 12px; }
+.research-step-subtask    { color: #fbbf24; font-weight: 600; border-top: 1px solid #ffffff10; padding-top: 4px; margin-top: 2px; }

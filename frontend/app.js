@@ -1127,21 +1127,41 @@ function _handleBrowserEvent(event, steps, screen, result) {
         return;
     }
 
+    if (type === 'plan') {
+        if (data.subtasks) {
+            _appendBrowserStep(steps, 'plan', `📋 Plan (${data.subtasks.length} steps):`);
+            data.subtasks.forEach((st, i) => {
+                _appendBrowserStep(steps, 'plan-item', `  ${i+1}. ${st}`);
+            });
+        } else {
+            _appendBrowserStep(steps, 'plan', `🧠 ${data.message}`);
+        }
+        return;
+    }
+
+    if (type === 'subtask_start') {
+        _appendBrowserStep(steps, 'subtask', `▶ [${data.idx}/${data.total}] ${data.subtask}`);
+        return;
+    }
+
+    if (type === 'subtask_done') {
+        _appendBrowserStep(steps, 'done', `✅ [${data.idx}] ${data.summary}`);
+        return;
+    }
+
     if (type === 'step') {
         const icon = {
             navigate: '🌐', click: '👆', type: '⌨️', scroll: '↕️',
             press: '⌨️', wait: '⏳', extract: '📋', screenshot: '📸',
-            select: '🔽', error: '❌',
+            select: '🔽', error: '❌', subtask_done: '✅',
         }[data.action] || '•';
 
-        let msg = `${icon} Step ${data.step}: ${data.action}`;
-        if (data.target) msg += ` → ${data.target}`;
-        if (data.result && data.result !== 'clicked' && data.result !== 'typed') msg += ` (${data.result.slice(0, 60)})`;
+        let msg = `${icon} ${data.action}`;
+        if (data.target && data.target.length < 50) msg += ` "${data.target}"`;
         if (data.error) msg += ` ❌ ${data.error}`;
 
         _appendBrowserStep(steps, data.error ? 'error' : 'step', msg);
 
-        // Show screenshot if provided
         if (data.screenshot_b64) {
             screen.classList.remove('hidden');
             document.getElementById('browserScreenImg').src = `data:image/jpeg;base64,${data.screenshot_b64}`;
@@ -1151,16 +1171,13 @@ function _handleBrowserEvent(event, steps, screen, result) {
 
     if (type === 'done') {
         _browserSSE.close(); _browserSSE = null;
-
-        _appendBrowserStep(steps, 'done', `✅ Done in ${data.steps_taken} steps`);
+        _appendBrowserStep(steps, 'done', `✅ Complete — ${data.steps_taken} steps, ${data.subtasks_completed || '?'} sub-tasks`);
         result.classList.remove('hidden');
         result.innerHTML = `<div class="browser-result-text">${escapeHtml(data.result || '')}</div>`;
-
         if (data.screenshot_b64) {
             screen.classList.remove('hidden');
             document.getElementById('browserScreenImg').src = `data:image/jpeg;base64,${data.screenshot_b64}`;
         }
-
         document.getElementById('browserRunBtn').disabled = false;
         document.getElementById('browserRunBtn').textContent = '▶ Run';
         return;

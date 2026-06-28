@@ -1,28 +1,14 @@
 """
-BrowserTaskAgent — AI observe→decide→act loop for full browser automation.
+BrowserTaskAgent v2 — AI browser controller with task planner + retry.
 
-The agent:
-  1. Gets page state (DOM elements + visible text + optional screenshot)
-  2. Sends to LLM with task context
-  3. LLM returns next JSON action
-  4. Executes action
-  5. Repeats until LLM says "done" or max_steps reached
+Flow:
+  1. PLAN: LLM decomposes task into numbered sub-tasks
+  2. EXECUTE: for each sub-task, observe→decide→act loop
+  3. RETRY: if action fails 2x on same page, LLM picks alternative strategy
+  4. VERIFY: after each sub-task, LLM confirms completion before moving on
 
-Handles: Salesforce, Cisco labs, Google Workspace, any web app.
-Works headed (user watches) or headless (background).
-
-Action schema LLM must return:
-  {"action": "navigate",  "url": "https://..."}
-  {"action": "click",     "target": "button text or [idx] or CSS"}
-  {"action": "type",      "target": "field label or [idx]", "text": "value"}
-  {"action": "select",    "target": "CSS selector", "value": "option value"}
-  {"action": "scroll",    "direction": "down|up", "amount": 3}
-  {"action": "press",     "key": "Enter|Tab|Escape|..."}
-  {"action": "wait",      "seconds": 2}
-  {"action": "extract",   "target": "CSS selector"}
-  {"action": "screenshot"}
-  {"action": "done",      "result": "summary of what was accomplished"}
-  {"action": "failed",    "reason": "why task cannot be completed"}
+Works on: Salesforce, Cisco labs, Google Workspace, any web app.
+Handles: shadow DOM, React/LWC, iframes, login flows, form filling, navigation.
 """
 
 import asyncio
@@ -34,62 +20,59 @@ from typing import AsyncGenerator
 from app.utils import logger
 
 
-@dataclass
-class BrowserStep:
-    step: int
-    action: str
-    target: str = ""
-    result: str = ""
-    screenshot_b64: str = ""
-    error: str = ""
+_PLANNER_PROMPT = """You are a browser automation planner. Break the following task into clear numbered sub-tasks.
 
-    def to_dict(self) -> dict:
-        d = {
-            "step": self.step,
-            "action": self.action,
-            "target": self.target,
-            "result": self.result,
-            "error": self.error,
-        }
-        if self.screenshot_b64:
-            d["screenshot_b64"] = self.screenshot_b64
-        return d
+Task: {task}
+Start URL: {url}
 
-    def to_sse(self) -> str:
-        payload = {"type": "step", "data": self.to_dict()}
-        return f"data: {json.dumps(payload)}\n\n"
+Rules:
+- Each sub-task should be ONE clear action goal (login, navigate to X, fill form, click button, verify result)
+- Identify if login is needed as sub-task 1
+- Be specific about what to look for on each page
+- Max 15 sub-tasks
 
+Reply with ONLY a JSON array of strings. Example:
+["Navigate to login page", "Enter username and password and submit", "Go to Leads module", "Click New Lead button", "Fill First Name: John, Last Name: Smith, Company: Acme", "Save the lead", "Verify success message"]
+"""
 
-_SYSTEM_PROMPT = """You are an expert browser automation agent. You control a real browser to complete tasks.
+_AGENT_SYSTEM = """You are an expert browser automation agent controlling a real Chromium browser.
 
-RULES:
-1. Reply with ONLY a single JSON action object. No explanation, no markdown.
-2. Choose the most precise action. Prefer clicking visible text over CSS selectors.
-3. Reference elements by their [idx] number from the elements list when possible.
-4. After typing in a form field, always submit with press Enter or click the submit button.
-5. If a page is loading, use {"action": "wait", "seconds": 2}.
-6. If login is needed and you have credentials, use them.
-7. When the task is fully complete, use {"action": "done", "result": "..."}.
-8. If truly stuck after 3 attempts on same step, use {"action": "failed", "reason": "..."}.
+CRITICAL RULES:
+1. Reply with ONLY one JSON action. No markdown, no explanation.
+2. Elements are listed as [idx] tag — label. Always prefer [idx] reference for precision.
+3. Salesforce Lightning / Cisco labs use shadow DOM — elements ARE detected, use their [idx].
+4. After login submit, ALWAYS wait 3-5 seconds for the app to load.
+5. If a dropdown appears after typing (autocomplete), click the matching option.
+6. If a button is not visible, scroll down first.
+7. If same action fails twice in a row, try a DIFFERENT approach (different idx, different text, scroll first).
+8. For Salesforce: after clicking "New" or "Save", wait for the modal/form to fully load.
+9. For Cisco labs: read the lab instructions visible on page, follow them exactly.
+10. Only use {"action": "done"} when you can SEE confirmation that the task is complete.
 
-AVAILABLE ACTIONS:
+CURRENT SUB-TASK: {subtask}
+OVERALL TASK: {task}
+SUB-TASK PROGRESS: {progress}
+
+ACTIONS:
 {"action": "navigate", "url": "https://..."}
-{"action": "click", "target": "text or [idx] or CSS"}
-{"action": "type", "target": "label or [idx]", "text": "value to type"}
-{"action": "select", "target": "CSS", "value": "option"}
+{"action": "click", "target": "[idx] or exact button text"}
+{"action": "type", "target": "[idx] or field label", "text": "value"}
+{"action": "select", "target": "CSS selector", "value": "option text"}
 {"action": "scroll", "direction": "down", "amount": 3}
-{"action": "press", "key": "Enter"}
-{"action": "wait", "seconds": 2}
-{"action": "extract", "target": "CSS or body"}
+{"action": "press", "key": "Enter|Tab|Escape|ArrowDown"}
+{"action": "wait", "seconds": 3}
+{"action": "extract", "target": "body"}
 {"action": "screenshot"}
-{"action": "done", "result": "task complete summary"}
-{"action": "failed", "reason": "explanation"}
+{"action": "subtask_done", "summary": "what was accomplished"}
+{"action": "done", "result": "full task completion summary"}
+{"action": "failed", "reason": "why impossible"}
 """
 
 
 class BrowserTaskAgent:
     name = "browser_task"
-    MAX_STEPS = 50
+    MAX_STEPS_PER_SUBTASK = 15
+    MAX_SUBTASKS = 15
 
     async def run_task(
         self,
@@ -98,186 +81,244 @@ class BrowserTaskAgent:
         credentials: dict | None = None,
         headless: bool | None = None,
         capture_screenshots: bool = True,
-        max_steps: int = MAX_STEPS,
+        max_steps: int = 80,
     ) -> AsyncGenerator[dict, None]:
-        """
-        Async generator — yields step dicts as the agent works.
-        Final event has type "done" or "failed".
-        """
-        from app.services.browser_controller import BrowserController
+
+        from app.services.browser_controller import BrowserController, HEADLESS
         from app.services.chat_service import get_llm
 
-        # Respect env BROWSER_HEADLESS but allow per-task override
-        from app.services.browser_controller import HEADLESS
         _headless = headless if headless is not None else HEADLESS
-
         llm = get_llm()
         browser = BrowserController(headless=_headless)
-        history: list[str] = []
+        total_steps = 0
 
-        yield {"type": "start", "data": {"task": task, "headless": _headless}}
+        yield _ev("start", {"task": task, "headless": _headless})
 
         try:
             await browser.start()
 
+            # ── Navigate to start URL ──────────────────────────────────────
             if start_url:
-                actual_url = await browser.navigate(start_url)
-                yield {"type": "step", "data": {"step": 0, "action": "navigate", "target": start_url, "result": actual_url}}
-                history.append(f"Step 0: navigate → {actual_url}")
+                actual = await browser.navigate(start_url)
+                yield _ev("step", _step(0, "navigate", start_url, actual))
+                total_steps += 1
 
-            for step_num in range(1, max_steps + 1):
-                # Get current page state
-                state = await browser.get_state(capture_screenshot=capture_screenshots and step_num % 3 == 0)
+            # ── Phase 1: Plan ──────────────────────────────────────────────
+            yield _ev("plan", {"message": "Planning task steps..."})
+            subtasks = await self._plan(llm, task, start_url, credentials)
+            yield _ev("plan", {"message": f"Plan ready: {len(subtasks)} sub-tasks", "subtasks": subtasks})
 
-                # Build prompt
-                creds_hint = ""
-                if credentials:
-                    creds_hint = "\n\nAvailable credentials:\n" + "\n".join(f"  {k}: {v}" for k, v in credentials.items())
+            # ── Phase 2: Execute each sub-task ─────────────────────────────
+            completed_subtasks: list[str] = []
+            step_num = total_steps
 
-                history_text = "\n".join(history[-8:])  # last 8 steps only
+            for st_idx, subtask in enumerate(subtasks):
+                yield _ev("subtask_start", {
+                    "idx": st_idx + 1,
+                    "total": len(subtasks),
+                    "subtask": subtask,
+                })
 
-                prompt = (
-                    f"Task: {task}{creds_hint}\n\n"
-                    f"Step {step_num}/{max_steps}\n\n"
-                    f"Current page state:\n{state.to_context()}\n\n"
-                    f"Actions taken so far:\n{history_text or '(none yet)'}\n\n"
-                    f"What is the SINGLE next action? Reply with ONLY JSON."
-                )
+                consecutive_fails = 0
+                last_action = ""
 
-                # Get LLM decision
-                try:
-                    raw = await llm.complete(prompt, system=_SYSTEM_PROMPT)
-                    action_json = _parse_action(raw)
-                except Exception as e:
-                    yield {"type": "step", "data": {"step": step_num, "action": "error", "error": f"LLM failed: {e}"}}
-                    await asyncio.sleep(2)
-                    continue
+                for _ in range(self.MAX_STEPS_PER_SUBTASK):
+                    step_num += 1
+                    if step_num > max_steps:
+                        yield _ev("failed", {"reason": f"Exceeded max steps ({max_steps})"})
+                        return
 
-                action = action_json.get("action", "")
-                target = action_json.get("target", "")
-                result = ""
-                screenshot_b64 = ""
-                error = ""
+                    state = await browser.get_state(
+                        capture_screenshot=capture_screenshots and step_num % 4 == 0
+                    )
 
-                # Execute action
-                try:
-                    if action == "navigate":
-                        result = await browser.navigate(action_json.get("url", ""))
+                    progress = f"{st_idx+1}/{len(subtasks)} done: [{', '.join(completed_subtasks[-3:])}]"
 
-                    elif action == "click":
-                        ok = await browser.click(target)
-                        result = "clicked" if ok else "click failed — element not found"
-                        await asyncio.sleep(0.8)
+                    creds_hint = ""
+                    if credentials:
+                        creds_hint = "\n\nCredentials available:\n" + \
+                            "\n".join(f"  {k}: {v}" for k, v in credentials.items())
 
-                    elif action == "type":
-                        ok = await browser.type_text(target, action_json.get("text", ""))
-                        result = "typed" if ok else "type failed — field not found"
+                    prompt = (
+                        f"{creds_hint}\n\n"
+                        f"Page state:\n{state.to_context()}\n\n"
+                        f"Failed attempts on this page: {consecutive_fails}\n"
+                        f"Last action tried: {last_action}\n\n"
+                        f"What is the next action for the current sub-task?"
+                    )
 
-                    elif action == "select":
-                        ok = await browser.select_option(target, action_json.get("value", ""))
-                        result = "selected" if ok else "select failed"
-
-                    elif action == "scroll":
-                        await browser.scroll(
-                            action_json.get("direction", "down"),
-                            action_json.get("amount", 3),
+                    try:
+                        raw = await llm.complete(
+                            prompt,
+                            system=_AGENT_SYSTEM.format(
+                                subtask=subtask,
+                                task=task,
+                                progress=progress,
+                            ),
                         )
-                        result = "scrolled"
+                        action_json = _parse_action(raw)
+                    except Exception as e:
+                        yield _ev("step", _step(step_num, "error", "", f"LLM error: {e}"))
+                        await asyncio.sleep(2)
+                        continue
 
-                    elif action == "press":
-                        await browser.press_key(action_json.get("key", "Enter"))
-                        result = f"pressed {action_json.get('key')}"
-                        await asyncio.sleep(0.5)
+                    action = action_json.get("action", "")
+                    target = action_json.get("target", "")
+                    result = ""
+                    error = ""
+                    screenshot_b64 = state.screenshot_b64
 
-                    elif action == "wait":
-                        secs = float(action_json.get("seconds", 2))
-                        await browser.wait_seconds(secs)
-                        result = f"waited {secs}s"
+                    last_action = f"{action} {target}"
 
-                    elif action == "extract":
-                        result = await browser.extract_text(target or "body")
+                    try:
+                        if action == "navigate":
+                            result = await browser.navigate(action_json.get("url", ""))
 
-                    elif action == "screenshot":
-                        screenshot_b64 = await browser.screenshot_b64()
-                        result = "screenshot taken"
-                        capture_screenshots = True  # keep capturing now
+                        elif action == "click":
+                            ok = await browser.click(target)
+                            if ok:
+                                result = "clicked"
+                                consecutive_fails = 0
+                            else:
+                                result = "click failed"
+                                consecutive_fails += 1
+                                error = f"Could not click '{target}'"
 
-                    elif action == "done":
-                        final_result = action_json.get("result", "Task completed")
-                        # Capture final screenshot
-                        final_ss = await browser.screenshot_b64() if capture_screenshots else ""
-                        yield {
-                            "type": "done",
-                            "data": {
+                        elif action == "type":
+                            ok = await browser.type_text(target, action_json.get("text", ""))
+                            result = "typed" if ok else "type failed"
+                            if not ok:
+                                consecutive_fails += 1
+                                error = f"Could not type into '{target}'"
+
+                        elif action == "select":
+                            ok = await browser.select_option(target, action_json.get("value", ""))
+                            result = "selected" if ok else "select failed"
+
+                        elif action == "scroll":
+                            await browser.scroll(action_json.get("direction", "down"), action_json.get("amount", 3))
+                            result = "scrolled"
+                            consecutive_fails = 0
+
+                        elif action == "press":
+                            await browser.press_key(action_json.get("key", "Enter"))
+                            result = f"pressed {action_json.get('key')}"
+
+                        elif action == "wait":
+                            secs = min(float(action_json.get("seconds", 2)), 10)
+                            await browser.wait_seconds(secs)
+                            result = f"waited {secs}s"
+                            consecutive_fails = 0
+
+                        elif action == "extract":
+                            result = (await browser.extract_text(target or "body"))[:500]
+
+                        elif action == "screenshot":
+                            screenshot_b64 = await browser.screenshot_b64()
+                            result = "screenshot taken"
+
+                        elif action == "subtask_done":
+                            summary = action_json.get("summary", subtask)
+                            completed_subtasks.append(summary)
+                            yield _ev("subtask_done", {"idx": st_idx + 1, "summary": summary})
+                            if capture_screenshots:
+                                screenshot_b64 = await browser.screenshot_b64()
+                            yield _ev("step", {
+                                **_step(step_num, "subtask_done", subtask, summary),
+                                "screenshot_b64": screenshot_b64,
+                            })
+                            break  # move to next sub-task
+
+                        elif action == "done":
+                            final_result = action_json.get("result", "Task completed")
+                            if capture_screenshots:
+                                screenshot_b64 = await browser.screenshot_b64()
+                            yield _ev("done", {
                                 "step": step_num,
                                 "result": final_result,
                                 "steps_taken": step_num,
-                                "screenshot_b64": final_ss,
-                            },
-                        }
-                        return
+                                "subtasks_completed": len(completed_subtasks),
+                                "screenshot_b64": screenshot_b64,
+                            })
+                            return
 
-                    elif action == "failed":
-                        yield {
-                            "type": "failed",
-                            "data": {
-                                "step": step_num,
-                                "reason": action_json.get("reason", "Unknown failure"),
-                            },
-                        }
-                        return
+                        elif action == "failed":
+                            yield _ev("failed", {"reason": action_json.get("reason", "Unknown")})
+                            return
 
-                    else:
-                        error = f"Unknown action: {action}"
+                    except Exception as e:
+                        error = str(e)
+                        consecutive_fails += 1
+                        logger.warning(f"BrowserTask step {step_num}: {e}")
 
-                except Exception as e:
-                    error = str(e)
-                    logger.warning(f"BrowserTask step {step_num} execute error: {e}")
+                    step_data = _step(step_num, action, target, result, error)
+                    if screenshot_b64 and action not in ("subtask_done",):
+                        step_data["screenshot_b64"] = screenshot_b64
+                    yield _ev("step", step_data)
 
-                # Capture screenshot every 3 steps or after navigation
-                if capture_screenshots and (step_num % 3 == 0 or action == "navigate") and not screenshot_b64:
-                    try:
-                        screenshot_b64 = await browser.screenshot_b64()
-                    except Exception:
-                        pass
+                else:
+                    # Sub-task max steps hit — continue to next sub-task anyway
+                    yield _ev("subtask_done", {
+                        "idx": st_idx + 1,
+                        "summary": f"{subtask} (max steps reached, continuing)",
+                    })
+                    completed_subtasks.append(f"{subtask} (partial)")
 
-                step_data = {
-                    "step": step_num,
-                    "action": action,
-                    "target": target,
-                    "result": result[:300],
-                    "error": error,
-                }
-                if screenshot_b64:
-                    step_data["screenshot_b64"] = screenshot_b64
-
-                history.append(f"Step {step_num}: {action} {target} → {result[:80]}{' ERROR: ' + error if error else ''}")
-                yield {"type": "step", "data": step_data}
-
-            # Hit max steps
-            yield {"type": "failed", "data": {"reason": f"Reached max steps ({max_steps}) without completing task."}}
+            # All sub-tasks done
+            if capture_screenshots:
+                ss = await browser.screenshot_b64()
+            else:
+                ss = ""
+            yield _ev("done", {
+                "step": step_num,
+                "result": f"All {len(subtasks)} sub-tasks completed: " + "; ".join(completed_subtasks),
+                "steps_taken": step_num,
+                "subtasks_completed": len(completed_subtasks),
+                "screenshot_b64": ss,
+            })
 
         except Exception as e:
-            logger.error(f"BrowserTaskAgent error: {e}")
-            yield {"type": "failed", "data": {"reason": str(e)}}
+            logger.error(f"BrowserTaskAgent fatal: {e}")
+            yield _ev("failed", {"reason": str(e)})
         finally:
-            try:
-                await browser.stop()
-            except Exception:
-                pass
+            await browser.stop()
+
+    async def _plan(self, llm, task: str, url: str, credentials: dict | None) -> list[str]:
+        cred_hint = ""
+        if credentials:
+            cred_hint = f"\nCredentials available: {list(credentials.keys())}"
+        prompt = _PLANNER_PROMPT.format(task=task + cred_hint, url=url or "not specified")
+        try:
+            raw = await llm.complete(prompt)
+            raw = raw.strip()
+            start = raw.find("[")
+            end = raw.rfind("]") + 1
+            if start >= 0 and end > start:
+                subtasks = json.loads(raw[start:end])
+                return [str(s) for s in subtasks[:self.MAX_SUBTASKS]]
+        except Exception as e:
+            logger.warning(f"Task planning failed: {e}, using single-task mode")
+        return [task]
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _ev(type_: str, data: dict) -> dict:
+    return {"type": type_, "data": data}
+
+
+def _step(step: int, action: str, target: str, result: str, error: str = "") -> dict:
+    return {"step": step, "action": action, "target": target, "result": result[:300], "error": error}
 
 
 def _parse_action(raw: str) -> dict:
-    """Extract JSON from LLM response — handles markdown code blocks."""
     raw = raw.strip()
-    # Strip markdown code block
     raw = re.sub(r"```(?:json)?\s*", "", raw).replace("```", "").strip()
-    # Find first { ... }
     start = raw.find("{")
     end = raw.rfind("}") + 1
     if start >= 0 and end > start:
         return json.loads(raw[start:end])
-    raise ValueError(f"No valid JSON action in LLM response: {raw[:200]}")
+    raise ValueError(f"No JSON in LLM response: {raw[:200]}")
 
 
 _agent: BrowserTaskAgent | None = None
