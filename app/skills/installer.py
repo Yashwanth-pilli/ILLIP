@@ -17,12 +17,10 @@ Flow:
 
 import asyncio
 import importlib
-import importlib.util
 import inspect
 import os
 import shutil
 import sys
-import tempfile
 import types
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -120,67 +118,138 @@ async def _install_raw_file(url: str) -> InstallResult:
     )
 
 
+def _parse_github_url(url: str) -> tuple[str, str, str]:
+    """
+    Parse GitHub URL into (owner, repo, branch).
+    Handles:
+      https://github.com/owner/repo
+      https://github.com/owner/repo/tree/main
+      https://github.com/owner/repo.git
+    """
+    url = url.rstrip("/").removesuffix(".git")
+    parts = url.replace("https://github.com/", "").split("/")
+    owner = parts[0] if len(parts) > 0 else ""
+    repo  = parts[1] if len(parts) > 1 else ""
+    branch = parts[3] if len(parts) > 3 and parts[2] == "tree" else "main"
+    return owner, repo, branch
+
+
+async def _fetch_github_file_list(owner: str, repo: str, branch: str, token: str = "") -> list[dict]:
+    """Use GitHub contents API to list .py files. No git, no disk."""
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    # Fetch repo tree (recursive) — one API call gets all paths
+    url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
+    async with httpx.AsyncClient(timeout=20, headers=headers) as c:
+        r = await c.get(url)
+        if r.status_code == 404:
+            # Try 'master' branch if 'main' not found
+            url2 = url.replace(f"/{branch}?", "/master?")
+            r = await c.get(url2)
+        r.raise_for_status()
+        tree = r.json().get("tree", [])
+
+    # Only .py files not in __pycache__, tests, or hidden dirs
+    py_files = [
+        item for item in tree
+        if item["type"] == "blob"
+        and item["path"].endswith(".py")
+        and not any(p.startswith((".", "_", "test", "setup", "conf"))
+                    for p in item["path"].split("/"))
+    ]
+    return py_files
+
+
 async def _install_github_repo(repo_url: str) -> InstallResult:
-    """Clone repo to temp dir, find + register skills/connectors, offer cleanup."""
-    tmp = tempfile.mkdtemp(prefix="illip_skill_")
+    """
+    Install from GitHub repo URL — fully in memory, zero disk write.
+
+    Uses GitHub Contents API to list .py files, fetches each via raw URL,
+    exec's in memory. No git clone. No temp dir. No disk usage.
+    """
+    import os
+
+    # Convert github.com URL → raw content base
+    owner, repo, branch = _parse_github_url(repo_url)
+    if not owner or not repo:
+        return InstallResult(installed=False, error=f"Cannot parse GitHub URL: {repo_url}")
+
+    gh_token = os.getenv("GITHUB_TOKEN", "")  # optional — avoids rate limits
+
+    # Step 1: list all .py files in repo via API
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "git", "clone", "--depth=1", repo_url, tmp,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            shutil.rmtree(tmp, ignore_errors=True)
-            return InstallResult(installed=False, error=f"git clone failed: {stderr.decode()[:300]}")
+        py_files = await _fetch_github_file_list(owner, repo, branch, gh_token)
     except Exception as e:
-        shutil.rmtree(tmp, ignore_errors=True)
-        return InstallResult(installed=False, error=f"git not found or clone error: {e}")
+        return InstallResult(installed=False, error=f"GitHub API error: {e}. Set GITHUB_TOKEN env var to avoid rate limits.")
 
-    # Install requirements if present
-    req_file = Path(tmp) / "requirements.txt"
-    if req_file.exists():
-        proc2 = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q",
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc2.communicate()
+    if not py_files:
+        return InstallResult(installed=False, error="No .py files found in repo.")
 
-    # Find skill .py files (look for skill.py, connector.py, or any .py in root/src)
-    search_dirs = [Path(tmp), Path(tmp) / "src", Path(tmp) / "skill", Path(tmp) / "connector"]
-    py_files = []
-    for d in search_dirs:
-        if d.exists():
-            py_files.extend(d.glob("*.py"))
+    # Step 2: check for requirements.txt — install deps first
+    headers = {"Accept": "application/vnd.github+json"}
+    if gh_token:
+        headers["Authorization"] = f"Bearer {gh_token}"
 
+    req_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/requirements.txt"
+    try:
+        async with httpx.AsyncClient(timeout=10, headers=headers) as c:
+            r = await c.get(req_url)
+        if r.status_code == 200:
+            reqs = [
+                line.strip() for line in r.text.splitlines()
+                if line.strip() and not line.startswith("#")
+            ]
+            if reqs:
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-m", "pip", "install", *reqs, "-q",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await proc.communicate()
+                logger.info(f"GitHub repo deps installed: {reqs}")
+    except Exception:
+        pass  # requirements.txt optional
+
+    # Step 3: fetch + exec each .py file in memory
     registered: list[str] = []
-    for py_file in py_files:
-        if py_file.name.startswith("_"):
-            continue
-        spec = importlib.util.spec_from_file_location(py_file.stem, py_file)
-        if not spec:
-            continue
-        mod = importlib.util.module_from_spec(spec)
-        mod.__name__ = "__exec__"
-        try:
-            spec.loader.exec_module(mod)
-            registered.extend(_find_and_register_classes(mod))
-        except Exception as e:
-            logger.debug(f"Skipping {py_file.name}: {e}")
+    errors: list[str] = []
+
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
+        for item in py_files:
+            raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{item['path']}"
+            try:
+                r = await c.get(raw_url)
+                r.raise_for_status()
+                code = r.text
+            except Exception as e:
+                errors.append(f"{item['path']}: fetch failed ({e})")
+                continue
+
+            mod_name = Path(item["path"]).stem
+            mod = types.ModuleType(mod_name)
+            mod.__name__ = "__exec__"
+            try:
+                exec(compile(code, raw_url, "exec"), mod.__dict__)  # noqa: S102
+                sys.modules[mod_name] = mod
+                found = _find_and_register_classes(mod)
+                registered.extend(found)
+            except Exception as e:
+                errors.append(f"{item['path']}: exec failed ({e})")
 
     if not registered:
-        shutil.rmtree(tmp, ignore_errors=True)
-        return InstallResult(installed=False, error="No BaseSKill or BaseConnector subclass found in repo.")
+        err_detail = "; ".join(errors[:3]) if errors else "no BaseSKill/BaseConnector subclass found"
+        return InstallResult(installed=False, error=f"Nothing registered. {err_detail}")
 
-    names_str = ", ".join(registered)
     return InstallResult(
         installed=True,
         names=registered,
-        cleanup_needed=True,
-        temp_path=tmp,
+        cleanup_needed=False,  # no disk used — nothing to clean up
         prompt=(
-            f"Skill '{names_str}' integrated from GitHub repo. "
-            f"Downloaded folder at {tmp}. Keep it or delete to save space?"
+            f"'{', '.join(registered)}' integrated from {owner}/{repo} — "
+            f"fully in memory, zero disk used. "
+            f"Add persist=true to save to data/connectors/ for auto-load on restart."
         ),
     )
 
