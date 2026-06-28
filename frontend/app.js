@@ -1127,6 +1127,11 @@ function _handleBrowserEvent(event, steps, screen, result) {
         return;
     }
 
+    if (type === 'setup') {
+        _appendBrowserStep(steps, 'plan', `🔧 ${data.message}`);
+        return;
+    }
+
     if (type === 'plan') {
         if (data.subtasks) {
             _appendBrowserStep(steps, 'plan', `📋 Plan (${data.subtasks.length} steps):`);

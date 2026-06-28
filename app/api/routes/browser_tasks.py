@@ -29,16 +29,23 @@ class BrowserTaskRequest(BaseModel):
 
 @router.get("/status")
 async def browser_status():
-    """Check if Playwright is installed and ready."""
+    """Check browser readiness. Auto-installs on first task run — no manual steps needed."""
+    from app.services.browser_controller import _chromium_installed
+
     try:
-        from playwright.async_api import async_playwright  # noqa
-        installed = True
+        import playwright  # noqa
+        pw_installed = True
     except ImportError:
-        installed = False
+        pw_installed = False
+
+    chromium_ready = _chromium_installed()
 
     return {
-        "playwright_installed": installed,
-        "install_command": "pip install playwright && playwright install chromium" if not installed else None,
+        "ready": pw_installed and chromium_ready,
+        "playwright_installed": pw_installed,
+        "chromium_installed": chromium_ready,
+        "auto_install": True,
+        "note": "Chromium auto-downloads on first use (~150MB, one-time)." if not chromium_ready else "Browser ready.",
         "headless_mode": __import__("os").getenv("BROWSER_HEADLESS", "true"),
     }
 

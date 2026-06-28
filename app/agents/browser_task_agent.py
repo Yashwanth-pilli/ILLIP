@@ -95,6 +95,23 @@ class BrowserTaskAgent:
         yield _ev("start", {"task": task, "headless": _headless})
 
         try:
+            # Auto-install Chromium on first use — no manual steps needed
+            from app.services.browser_controller import ensure_browser_ready
+
+            setup_msgs: list[str] = []
+
+            async def _on_setup_progress(msg: str):
+                setup_msgs.append(msg)
+
+            ready = await ensure_browser_ready(progress_cb=_on_setup_progress)
+
+            for msg in setup_msgs:
+                yield _ev("setup", {"message": msg})
+
+            if not ready:
+                yield _ev("failed", {"reason": "Could not install browser. Check internet connection."})
+                return
+
             await browser.start()
 
             # ── Navigate to start URL ──────────────────────────────────────

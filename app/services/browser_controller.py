@@ -13,11 +13,68 @@ import asyncio
 import base64
 import os
 import re
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from app.utils import logger
 
 HEADLESS = os.getenv("BROWSER_HEADLESS", "true").lower() != "false"
+
+# Where Playwright stores downloaded browsers (Windows / Linux / Mac)
+def _playwright_browsers_dir() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        base = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", Path.home() / ".cache"))
+    return base / "ms-playwright"
+
+
+def _chromium_installed() -> bool:
+    d = _playwright_browsers_dir()
+    if not d.exists():
+        return False
+    return any(p.name.startswith("chromium") for p in d.iterdir() if p.is_dir())
+
+
+async def ensure_browser_ready(progress_cb=None) -> bool:
+    """
+    Auto-install Playwright + Chromium on first use. No user action needed.
+    progress_cb: optional async callable(str) for status messages.
+    Returns True when ready.
+    """
+    async def _msg(text: str):
+        logger.info(f"[BrowserSetup] {text}")
+        if progress_cb:
+            await progress_cb(text)
+
+    # Step 1: ensure playwright Python package
+    try:
+        import playwright  # noqa
+    except ImportError:
+        await _msg("Installing Playwright package...")
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "pip", "install", "playwright", "-q",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.communicate()
+
+    # Step 2: ensure Chromium browser binary
+    if not _chromium_installed():
+        await _msg("Downloading Chromium browser (first time only, ~150MB)...")
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "playwright", "install", "chromium",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode != 0:
+            await _msg(f"Chromium install failed: {stdout.decode()[:200]}")
+            return False
+        await _msg("Chromium ready.")
+
+    return True
 
 # JS that pierces shadow DOM — critical for Salesforce Lightning / Cisco labs
 _SHADOW_DOM_JS = """
