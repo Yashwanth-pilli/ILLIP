@@ -53,9 +53,11 @@ function init() {
     updateHealthPanel();
     updateGovernancePanel();
     updateSchedulerPanel();
+    updateWorkflowsPanel();
     setInterval(updateHealthPanel, 10000);
     setInterval(updateGovernancePanel, 15000);
     setInterval(updateSchedulerPanel, 30000);
+    setInterval(updateWorkflowsPanel, 30000);
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
@@ -503,18 +505,108 @@ async function updateHardwareLive() {
 
 async function updateAgentsList() {
     const panel = document.getElementById('agentsList');
+    const badge = document.getElementById('agentActiveBadge');
+    const totalLabel = document.getElementById('agentTotalLabel');
     if (!panel) return;
     try {
         const res = await fetch(`${API_BASE_URL}/agents/`);
         if (!res.ok) { panel.innerHTML = '<p>Failed</p>'; return; }
         const data = await res.json();
-        panel.innerHTML = data.agents.map(a =>
-            `<div class="agent-item">
-                <span class="agent-name">${a.name || a.agent_type}</span>
-                <span class="agent-status ${a.is_available ? 'ok' : 'err'}">${a.is_available ? '●' : '○'}</span>
-            </div>`
-        ).join('') || '<p>No agents</p>';
+        const agents = data.agents || [];
+        const activeCount = agents.filter(a => a.is_available).length;
+        if (badge) {
+            badge.textContent = activeCount;
+            badge.classList.toggle('hidden', activeCount === 0);
+        }
+        if (totalLabel) totalLabel.textContent = `${agents.length} total`;
+        const maxTasks = Math.max(1, ...agents.map(a => a.task_count || 0));
+        panel.innerHTML = agents.map(a => {
+            const pct = Math.round(((a.task_count || 0) / maxTasks) * 100);
+            const lastAct = a.last_activity ? new Date(a.last_activity).toLocaleTimeString() : '—';
+            return `<div class="agent-card">
+                <div class="agent-card-header">
+                    <span class="agent-dot-${a.is_available ? 'ok' : 'err'}">●</span>
+                    <span class="agent-name">${a.name || a.agent_type}</span>
+                </div>
+                <div class="agent-card-stats">
+                    <span title="Tasks run">${a.task_count || 0} tasks</span>
+                    <span title="Last active">${lastAct}</span>
+                </div>
+                <div class="agent-perf-bar-wrap"><div class="agent-perf-bar" style="width:${pct}%"></div></div>
+            </div>`;
+        }).join('') || '<p>No agents</p>';
     } catch { panel.innerHTML = '<p>Unavailable</p>'; }
+}
+
+// ── Workflows Panel ───────────────────────────────────────────────────────────
+
+async function updateWorkflowsPanel() {
+    const panel = document.getElementById('workflowsList');
+    if (!panel) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/scheduler/jobs`);
+        if (!res.ok) { panel.innerHTML = '<p style="color:#64748b;font-size:12px">No workflows yet.<br>Click + New to create one.</p>'; return; }
+        const d = await res.json();
+        const jobs = d.jobs || [];
+        if (!jobs.length) {
+            panel.innerHTML = '<p style="color:#64748b;font-size:12px">No workflows yet.<br>Click + New to create one.</p>';
+            return;
+        }
+        panel.innerHTML = jobs.map(j => `
+            <div class="workflow-item">
+                <div class="workflow-name ${j.enabled ? '' : 'disabled'}">${escapeHtml(j.name)}</div>
+                <div style="font-size:10px;color:#64748b">every ${formatSecs(j.interval_s)} · ran ${j.run_count}×${j.last_error ? ' ⚠' : ''}</div>
+                <div class="sched-btns">
+                    <button onclick="schedRunNow('${j.id}')" class="sched-run-btn" title="Run now">▶</button>
+                    <button onclick="schedToggle('${j.id}', ${!j.enabled})" class="sched-toggle-btn">${j.enabled ? 'Pause' : 'Resume'}</button>
+                </div>
+            </div>
+        `).join('');
+    } catch { panel.innerHTML = '<p style="color:#64748b;font-size:12px">Unavailable</p>'; }
+}
+
+function showCreateJobModal() {
+    document.getElementById('createJobModal').classList.remove('hidden');
+    document.getElementById('newJobName').value = '';
+    document.getElementById('newJobPrompt').value = '';
+    document.getElementById('newJobInterval').value = '3600';
+}
+
+function closeCreateJobModal() {
+    document.getElementById('createJobModal').classList.add('hidden');
+}
+
+function setJobInterval(secs) {
+    document.getElementById('newJobInterval').value = secs;
+}
+
+async function createSchedulerJob() {
+    const name = document.getElementById('newJobName').value.trim();
+    const prompt = document.getElementById('newJobPrompt').value.trim();
+    const interval = parseInt(document.getElementById('newJobInterval').value) || 3600;
+    if (!name || !prompt) { alert('Name and prompt are required.'); return; }
+    const btn = document.getElementById('createJobBtn');
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    try {
+        const res = await fetch(`${API_BASE_URL}/scheduler/jobs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, prompt, interval_s: interval, enabled: true }),
+        });
+        if (res.ok) {
+            closeCreateJobModal();
+            await Promise.all([updateWorkflowsPanel(), updateSchedulerPanel()]);
+        } else {
+            const e = await res.json().catch(() => ({}));
+            alert('Failed: ' + (e.detail || 'Unknown error'));
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create';
+    }
 }
 
 async function updateStats() {

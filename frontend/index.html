@@ -211,8 +211,19 @@
                 </div>
 
                 <div class="panel agents-panel">
-                    <h3>Agents</h3>
+                    <div class="panel-header">
+                        <h3>Agents <span id="agentActiveBadge" class="badge hidden">0</span></h3>
+                        <span id="agentTotalLabel" style="font-size:11px;color:#64748b"></span>
+                    </div>
                     <div id="agentsList" class="agents-content"><p>Loading...</p></div>
+                </div>
+
+                <div class="panel workflows-panel">
+                    <div class="panel-header">
+                        <h3>Workflows</h3>
+                        <button class="panel-add-btn" onclick="showCreateJobModal()" title="Create scheduled workflow">&#43; New</button>
+                    </div>
+                    <div id="workflowsList" class="status-content"><p style="color:#64748b;font-size:12px">Loading...</p></div>
                 </div>
 
                 <div class="panel plugins-panel">
@@ -307,6 +318,32 @@
             <div class="dialog-btns">
                 <button onclick="createProject()" class="btn-primary">Create</button>
                 <button onclick="closeDialog()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Workflow / Scheduler Job modal -->
+    <div id="createJobModal" class="dialog-overlay hidden" onclick="if(event.target===this)closeCreateJobModal()">
+        <div class="dialog" style="min-width:380px;max-width:500px">
+            <h3>New Scheduled Workflow</h3>
+            <p style="font-size:12px;color:#64748b;margin-bottom:12px">Schedule an AI task to run automatically on a repeating interval.</p>
+            <input type="text" id="newJobName" class="dialog-input" placeholder="Workflow name (e.g. Daily summary)">
+            <textarea id="newJobPrompt" class="dialog-input" rows="4" style="resize:vertical;margin-top:8px" placeholder="What should the AI do? (e.g. Summarize today's news and save to memory)"></textarea>
+            <div style="margin:10px 0 4px;font-size:12px;color:#94a3b8">Repeat every:</div>
+            <div class="cron-hints">
+                <button class="cron-hint-btn" onclick="setJobInterval(300)">5 min</button>
+                <button class="cron-hint-btn" onclick="setJobInterval(1800)">30 min</button>
+                <button class="cron-hint-btn" onclick="setJobInterval(3600)">1 hr</button>
+                <button class="cron-hint-btn" onclick="setJobInterval(21600)">6 hr</button>
+                <button class="cron-hint-btn" onclick="setJobInterval(86400)">Daily</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                <input type="number" id="newJobInterval" class="create-job-field" value="3600" min="60" style="width:90px">
+                <span style="font-size:12px;color:#64748b">seconds</span>
+            </div>
+            <div class="dialog-btns" style="margin-top:14px">
+                <button id="createJobBtn" onclick="createSchedulerJob()" class="btn-primary">Create</button>
+                <button onclick="closeCreateJobModal()" class="btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
