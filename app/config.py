@@ -1,6 +1,6 @@
 """
-Configuration management for ILLIP AI
-Centralizes all environment variables and path configuration
+ILLIP AI configuration — all settings come from environment variables.
+Copy .env.example to .env and fill in what you need. Nothing is hardcoded.
 """
 
 import os
@@ -10,33 +10,91 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables"""
-    
-    # API Configuration
-    api_host: str = "127.0.0.1"
+    # ── Server ────────────────────────────────────────────────────────────────
+    api_host: str = "127.0.0.1"   # set 0.0.0.0 to expose on LAN
     api_port: int = 8000
-    debug: bool = True
-    
-    # Model Provider Configuration
-    model_provider: str = "ollama"  # mock or ollama
+    debug: bool = False
+    cors_origins: str = "*"       # comma-separated origins, or * for open
+
+    # ── Model provider ────────────────────────────────────────────────────────
+    # auto | ollama | openai_compat | anthropic | openrouter | groq | llamafile | airllm | mock
+    model_provider: str = "auto"
+
+    # Ollama — local models
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5:3b"
+    ollama_model: str = "llama3.2:3b"
 
-    # Telegram bridge (optional — set token to enable)
+    # Generic OpenAI-compatible endpoint
+    # Use for: DeepSeek, vLLM, LM Studio, Together AI, Mistral, Perplexity, etc.
+    openai_compat_base_url: str = ""
+    openai_compat_api_key: str = ""
+    openai_compat_model: str = ""
+
+    # Anthropic Claude
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-6"
+
+    # OpenRouter
+    openrouter_api_key: str = ""
+    openrouter_model: str = "meta-llama/llama-3.1-8b-instruct:free"
+
+    # Groq
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+
+    # llamafile
+    llamafile_url: str = "http://localhost:8080"
+    llamafile_model: str = ""
+
+    # AirLLM — layer-streaming for large models on low VRAM
+    airllm_model: str = ""
+
+    # ── API auth (optional) ───────────────────────────────────────────────────
+    # Leave empty for local single-user mode. Set to enable API key auth.
+    illip_api_keys: str = ""
+
+    # ── Integrations ──────────────────────────────────────────────────────────
     telegram_bot_token: str = ""
-    telegram_allowed_users: str = ""   # comma-separated Telegram user IDs; empty = owner only (first /start)
+    telegram_allowed_users: str = ""
 
-    # Search
-    brave_api_key: str = ""        # https://api.search.brave.com (free 2000/month)
-    searxng_url: str = "http://localhost:8888"  # docker run -d -p 8888:8080 searxng/searxng
-    # Database
+    notion_api_key: str = ""
+    notion_db_id: str = ""
+
+    discord_bot_token: str = ""
+
+    slack_bot_token: str = ""
+    slack_app_token: str = ""
+
+    email_address: str = ""
+    email_password: str = ""
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_from: str = "whatsapp:+14155238886"
+
+    n8n_base_url: str = "http://localhost:5678"
+    n8n_api_key: str = ""
+
+    telegram_storage_token: str = ""
+    telegram_storage_chat_id: str = ""
+
+    # ── Search ────────────────────────────────────────────────────────────────
+    searxng_url: str = "http://localhost:8888"
+    brave_api_key: str = ""
+
+    # ── Voice ─────────────────────────────────────────────────────────────────
+    whisper_model: str = "base"    # tiny | base | small | medium | large
+    piper_voice: str = ""
+
+    # ── Sync ──────────────────────────────────────────────────────────────────
+    sync_git_remote: str = ""
+
+    # ── Data paths ────────────────────────────────────────────────────────────
     database_url: str = "sqlite:///./data/illip.db"
-    
-    # Logging
-    log_level: str = "INFO"
-    log_file: str = "./data/logs/illip.log"
-    
-    # Paths (relative to project root, will be converted to absolute)
     data_dir: str = "./data"
     memory_dir: str = "./data/memory"
     logs_dir: str = "./data/logs"
@@ -44,58 +102,52 @@ class Settings(BaseSettings):
     workspaces_dir: str = "./data/workspaces"
     snapshots_dir: str = "./data/snapshots"
 
+    # ── Logging ───────────────────────────────────────────────────────────────
+    log_level: str = "INFO"
+    log_file: str = "./data/logs/illip.log"
+
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, value):
-        """Accept release/debug mode strings in addition to booleans."""
         if isinstance(value, str) and value.lower() == "release":
             return False
         return value
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
         extra="allow",
-        protected_namespaces=()
+        protected_namespaces=(),
     )
-    
+
     @property
     def project_root(self) -> Path:
-        """Get the project root directory"""
         return Path(__file__).parent.parent
-    
+
     def get_absolute_path(self, relative_path: str) -> Path:
-        """Convert a relative path to absolute, relative to project root"""
         if Path(relative_path).is_absolute():
             return Path(relative_path)
         return self.project_root / relative_path
-    
+
     def get_data_path(self) -> Path:
-        """Get absolute data directory path"""
         return self.get_absolute_path(self.data_dir)
-    
+
     def get_memory_path(self) -> Path:
-        """Get absolute memory directory path"""
         return self.get_absolute_path(self.memory_dir)
-    
+
     def get_logs_path(self) -> Path:
-        """Get absolute logs directory path"""
         return self.get_absolute_path(self.logs_dir)
-    
+
     def get_tasks_path(self) -> Path:
-        """Get absolute tasks directory path"""
         return self.get_absolute_path(self.tasks_dir)
-    
+
     def get_workspaces_path(self) -> Path:
-        """Get absolute workspaces directory path"""
         return self.get_absolute_path(self.workspaces_dir)
-    
+
     def get_snapshots_path(self) -> Path:
-        """Get absolute snapshots directory path"""
         return self.get_absolute_path(self.snapshots_dir)
-    
+
     def ensure_directories(self):
-        """Create all necessary directories if they don't exist"""
         for path in [
             self.get_data_path(),
             self.get_memory_path(),
@@ -106,6 +158,10 @@ class Settings(BaseSettings):
         ]:
             path.mkdir(parents=True, exist_ok=True)
 
+    def get_cors_origins(self) -> list:
+        if self.cors_origins.strip() == "*":
+            return ["*"]
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
-# Global settings instance
+
 settings = Settings()

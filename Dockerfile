@@ -1,25 +1,20 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl ffmpeg libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# System deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl && \
-    rm -rf /var/lib/apt/lists/*
-
-# Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App code
+RUN playwright install chromium --with-deps 2>/dev/null || true
+
 COPY . .
 
-# Data directory (memory, history, plugins persist via Railway volume)
-RUN mkdir -p data/projects/default data/plugins data/learning
-
-ENV MODEL_PROVIDER=auto
-ENV PORT=8000
+RUN mkdir -p data/memory data/logs data/tasks data/workspaces data/snapshots
 
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host ${API_HOST:-0.0.0.0} --port ${API_PORT:-8000}"]

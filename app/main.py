@@ -88,22 +88,21 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan handler
 app = FastAPI(
     title="ILLIP AI",
-    description="Local-first portable AI assistant system",
-    version="0.1.0",
+    description="Your AI company — portable, private, local-first.",
+    version="3.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
 
-# API key auth — enabled when ILLIP_API_KEYS set in .env (server mode)
+# API key auth — enabled when ILLIP_API_KEYS set in .env
 from app.auth import APIKeyMiddleware
 app.add_middleware(APIKeyMiddleware)
 
-# CORS is open for the local static frontend. Tighten this before exposing the
-# API outside your own machine.
+# CORS — configurable via CORS_ORIGINS in .env (default: open for local use)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.get_cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

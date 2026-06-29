@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  illip:
+    build: .
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - API_HOST=0.0.0.0
+    volumes:
+      - ./data:/app/data          # persistent data, memory, logs
+    restart: unless-stopped
+    depends_on:
+      - searxng
+
+  # Optional: local private search (remove if not needed)
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "8888:8080"
+    restart: unless-stopped
+
+  # Optional: Ollama local models (remove if using cloud API)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   runtime: nvidia        # remove if no GPU
+  #   restart: unless-stopped
+
+volumes:
+  ollama_data:
