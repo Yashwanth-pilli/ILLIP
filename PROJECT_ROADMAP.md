@@ -84,13 +84,19 @@
 
 ---
 
-## Phase 5: UI Completeness (In Progress)
+## Phase 5: UI Completeness ✓ (Complete — v3.1)
 
-- [ ] Workflows UI panel (visual workflow builder)
-- [ ] Skills/Plugins dedicated UI panel (browse, install, manage)
-- [ ] Governance controls UI panel (approve/reject pending actions)
-- [ ] Mobile-friendly audit and responsive fixes
-- [ ] Agent performance dashboard (task counts, latency, error rates)
+- [x] Workflows UI panel — scheduler jobs list, run/pause, + New modal with interval presets
+- [x] Skills/Plugins dedicated UI panel (browse, install, manage)
+- [x] Governance controls UI panel (approve/reject pending actions)
+- [x] Mobile-friendly audit and responsive fixes (640px breakpoint, button grid)
+- [x] Agent performance dashboard (task_count, last_activity, perf bar per agent)
+- [x] PyPI packaging — `pip install illip-ai` → `illip start` CLI
+- [x] Docker + docker-compose one-command deploy
+- [x] All env vars configurable — nothing hardcoded
+- [x] No model restrictions — DeepSeek, vLLM, LM Studio, any OpenAI-compat endpoint
+- [x] Anthropic native SDK provider (Claude Sonnet, Opus, etc.)
+- [x] 121 tests, 121 passing
 
 ---
 
@@ -125,4 +131,4 @@ Revenue structure intentionally deferred. Architecture already supports it (API 
 
 ---
 
-**Version:** 3.1 | **Last Updated:** 2026-06-29 | **Status:** Phase 4+ complete, Phase 5 UI in progress
+**Version:** 3.1 | **Last Updated:** 2026-06-29 | **Status:** Phases 1–5 complete. Phase 6 (revenue) deferred. Phase 7 (learning loop) next.
