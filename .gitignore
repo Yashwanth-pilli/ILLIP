@@ -102,6 +102,7 @@ htmlcov/
 data/agent_runs/
 data/terminal/
 data/qdrant/
+data/idea_vault/
 
 # Ship the built frontend so zip-download users get the UI without Node
 !frontend/dist/

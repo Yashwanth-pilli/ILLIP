@@ -146,6 +146,19 @@ export const api = {
     body: JSON.stringify({ command, confirm }),
   }).then(r => r.json()),
 
+  // Message management
+  chatDeleteMessage: (role, content) => fetch(`${BASE}/chat/message/delete`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role, content }),
+  }).then(r => r.json()),
+  chatRewind: (content) => fetch(`${BASE}/chat/message/rewind`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'user', content }),
+  }).then(r => r.json()),
+  workspaceDeleteFile: (path) => fetch(`${BASE}/workspace/file?path=${encodeURIComponent(path)}`, {
+    method: 'DELETE',
+  }).then(r => r.json()),
+
   // Idea Journey + Guardian (all return { report_md })
   ideaJourney: (idea) => fetch(`${BASE}/idea/journey`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -731,6 +731,22 @@ async def workspace_file_content(path: str = Query(..., description="Relative fi
         ) from exc
 
 
+@router.delete("/file")
+async def workspace_delete_file(path: str = Query(..., description="Relative file path inside workspace")):
+    """Delete a file the user created in the workspace. Sandboxed: workspace only."""
+    workspace_path = settings.get_workspaces_path().resolve()
+    target = (workspace_path / path).resolve()
+    if not str(target).startswith(str(workspace_path)):
+        raise HTTPException(status_code=403, detail="Path is outside the workspace")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+    try:
+        target.unlink()
+        return {"deleted": path}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to delete: {exc}") from exc
+
+
 @router.get("/search")
 async def workspace_search(
     q: str = Query(..., description="Search query"),

@@ -112,8 +112,15 @@ export default function WorkspacePanel() {
         <div>
           {!files.length && <p className="ws-muted">Workspace empty — drop files in data/workspaces/</p>}
           {files.map(f => (
-            <div key={f.name} className="ws-file" onClick={() => openFile(f.name)}>
-              📄 {f.name}
+            <div key={f.name} className="ws-file" onClick={() => openFile(f.name)}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>📄 {f.name}</span>
+              <button className="tab-action-btn" title="Delete file"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  if (!window.confirm(`Delete ${f.name}? This cannot be undone.`)) return
+                  try { await api.workspaceDeleteFile(f.name); load() } catch { /* gone already */ }
+                }}>🗑️</button>
             </div>
           ))}
         </div>

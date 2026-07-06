@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { api } from '../api.js'
 import MessageList from './MessageList.jsx'
 import ResearchPanel from './ResearchPanel.jsx'
 import BrowserPanel from './BrowserPanel.jsx'
@@ -13,7 +14,7 @@ export default function ChatMain({
   researchOpen, researchDepth, researchSteps, researchAnswer, researchSources, isResearching,
   browserOpen, browserSteps, browserScreen, browserResult, isBrowsing,
   imagePanelOpen, videoPanelOpen, activeModel,
-  onChat, onStop, onRegenerate, onOpenArtifact, artifactHtml, onCloseArtifact, onOpenGames, onOpenTerminal,
+  onChat, onStop, onRegenerate, onDeleteMessage, onEditMessage, onOpenArtifact, artifactHtml, onCloseArtifact, onOpenGames, onOpenTerminal,
   onToggleForceLarge, onToggleForceSearch, onMic, onSetPendingImage, onSetPendingDocument, onUploadFile,
   onStartResearch, onCloseResearch, onSetResearchDepth,
   onOpenBrowser, onCloseBrowser, onRunBrowser,
@@ -80,7 +81,7 @@ export default function ChatMain({
     setInputValue('')
   }
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files[0]
     e.target.value = ''
     if (!file) return
@@ -92,6 +93,20 @@ export default function ChatMain({
       const reader = new FileReader()
       reader.onload = ev => onSetPendingImage({ file, dataUrl: ev.target.result })
       reader.readAsDataURL(file)
+      return
+    }
+    // Audio files → transcribe with local Whisper, drop the text into the box.
+    const audioExts = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.webm', '.aac', '.opus']
+    if (file.type.startsWith('audio/') || audioExts.some(x => file.name.toLowerCase().endsWith(x))) {
+      setInputValue(v => v + `⏳ transcribing ${file.name}…`)
+      try {
+        const form = new FormData()
+        form.append('file', file)
+        const d = await api.transcribe(form)
+        setInputValue(v => v.replace(`⏳ transcribing ${file.name}…`, d.text || ''))
+      } catch {
+        setInputValue(v => v.replace(`⏳ transcribing ${file.name}…`, `(could not transcribe ${file.name})`))
+      }
       return
     }
     // Anything else — zip, video, csv, exe, whatever, any size → workspace upload
@@ -111,6 +126,8 @@ export default function ChatMain({
         onFeedback={onFeedback}
         onSpeak={onSpeak}
         onRegenerate={onRegenerate}
+        onDeleteMessage={onDeleteMessage}
+        onEditMessage={onEditMessage}
         onOpenArtifact={onOpenArtifact}
       />
 
@@ -141,22 +158,19 @@ export default function ChatMain({
           <button
             className="action-btn research"
             onClick={() => onStartResearch(inputValue.trim())}
-            disabled={isLoading || isResearching}
+            disabled={isResearching}
           >🔍 Research</button>
           <button
             className="action-btn browser"
             onClick={onOpenBrowser}
-            disabled={isLoading}
           >🌐 Browser</button>
           <button
             className="action-btn imggen"
             onClick={onOpenImage}
-            disabled={isLoading}
           >🎨 Image</button>
           <button
             className="action-btn vidgen"
             onClick={onOpenVideo}
-            disabled={isLoading}
           >🎬 Video</button>
           <button
             className="action-btn game"
@@ -165,7 +179,6 @@ export default function ChatMain({
           <button
             className="action-btn team"
             onClick={() => { const g = inputValue.trim(); if (g) { onChat('/task ' + g); setInputValue('') } }}
-            disabled={isLoading}
             title="Run your message through the agent company"
           >🏢 Team</button>
           <button
@@ -240,8 +253,7 @@ export default function ChatMain({
                 handleSubmit(e)
               }
             }}
-            placeholder="Message ILLIP… (Shift+Enter for a new line)"
-            disabled={isLoading}
+            placeholder={isLoading ? 'ILLIP is working — type your next message meanwhile…' : 'Message ILLIP… (Shift+Enter for a new line)'}
           />
           <button
             type="button"

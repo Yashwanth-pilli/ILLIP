@@ -192,6 +192,33 @@ def history_clear(project_id: str) -> None:
     _write_json(path, [])
 
 
+def history_remove(project_id: str, role: str, content: str) -> bool:
+    """Delete the LAST stored message matching role+content. True if removed."""
+    path = _history_path(project_id)
+    with _write_lock:
+        history = _read_json(path, [])
+        for i in range(len(history) - 1, -1, -1):
+            if history[i].get("role") == role and history[i].get("content") == content:
+                del history[i]
+                _write_json(path, history)
+                return True
+    return False
+
+
+def history_rewind(project_id: str, content: str) -> int:
+    """Delete the LAST user message matching content AND everything after it
+    (edit-and-resend). Returns how many messages were removed."""
+    path = _history_path(project_id)
+    with _write_lock:
+        history = _read_json(path, [])
+        for i in range(len(history) - 1, -1, -1):
+            if history[i].get("role") == "user" and history[i].get("content") == content:
+                removed = len(history) - i
+                _write_json(path, history[:i])
+                return removed
+    return 0
+
+
 # ── Qdrant collection name for a project ──────────────────────────────────────
 
 def qdrant_collection(project_id: str) -> str:

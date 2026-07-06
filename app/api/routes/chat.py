@@ -6,6 +6,7 @@ import json
 import asyncio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse as _StreamingResponse
+from pydantic import BaseModel
 from app.core import ChatRequest, ChatResponse, Message
 from app.services import get_chat_service
 from app.providers import get_provider
@@ -301,6 +302,35 @@ async def get_chat_history(limit: int = 50, project_id: str = "default"):
         }
     except Exception as e:
         logger.error(f"Error getting history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MessageRef(BaseModel):
+    role: str
+    content: str
+    project_id: str = "default"
+
+
+@router.post("/message/delete")
+async def delete_chat_message(ref: MessageRef):
+    """Delete one message (the last one matching role+content) from history."""
+    try:
+        removed = get_chat_service().remove_message(ref.role, ref.content, ref.project_id)
+        return {"removed": removed}
+    except Exception as e:
+        logger.error(f"Error deleting message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/message/rewind")
+async def rewind_chat(ref: MessageRef):
+    """Edit-and-resend support: drop the matching user message and everything
+    after it. The client then sends the edited text as a fresh message."""
+    try:
+        count = get_chat_service().rewind_to(ref.content, ref.project_id)
+        return {"removed": count}
+    except Exception as e:
+        logger.error(f"Error rewinding chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

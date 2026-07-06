@@ -12,6 +12,8 @@ from app.services.project_service import (
     history_load,
     history_append,
     history_clear,
+    history_remove,
+    history_rewind,
     ensure_default_project,
 )
 
@@ -70,6 +72,25 @@ class ChatService:
     def append_message(self, msg: Message, project_id: str = DEFAULT_PROJECT) -> None:
         self._get_history(project_id).append(msg)
         history_append(project_id, msg.role, msg.content)
+
+    def remove_message(self, role: str, content: str, project_id: str = DEFAULT_PROJECT) -> bool:
+        """Delete the last matching message from memory + disk."""
+        hist = self._get_history(project_id)
+        for i in range(len(hist) - 1, -1, -1):
+            if hist[i].role == role and hist[i].content == content:
+                del hist[i]
+                break
+        return history_remove(project_id, role, content)
+
+    def rewind_to(self, content: str, project_id: str = DEFAULT_PROJECT) -> int:
+        """Edit-and-resend: drop the last user message matching content and
+        everything after it, from memory + disk."""
+        hist = self._get_history(project_id)
+        for i in range(len(hist) - 1, -1, -1):
+            if hist[i].role == "user" and hist[i].content == content:
+                del hist[i:]
+                break
+        return history_rewind(project_id, content)
 
     async def send_message(
         self,

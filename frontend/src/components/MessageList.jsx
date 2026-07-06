@@ -27,11 +27,33 @@ function ThinkingBubble() {
   )
 }
 
-function Message({ msg, onFeedback, onSpeak, onRegenerate, isLast }) {
+function Message({ msg, onFeedback, onSpeak, onRegenerate, onDeleteMessage, onEditMessage, isLast }) {
   const [feedbackDone, setFeedbackDone] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
 
   if (msg.role === 'thinking') {
     return <ThinkingBubble />
+  }
+
+  if (editing) {
+    return (
+      <div className={`message ${msg.role}`}>
+        <div className="message-content" style={{width:'100%'}}>
+          <textarea
+            className="message-input"
+            style={{width:'100%',minHeight:'70px',resize:'vertical'}}
+            value={editText}
+            onChange={e => setEditText(e.target.value)}
+            autoFocus
+          />
+          <div style={{display:'flex',gap:'8px',marginTop:'6px'}}>
+            <button className="feedback-btn" onClick={() => { setEditing(false); onEditMessage(msg, editText) }}>✓ Send edited</button>
+            <button className="feedback-btn" onClick={() => setEditing(false)}>✕ Cancel</button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -44,6 +66,16 @@ function Message({ msg, onFeedback, onSpeak, onRegenerate, isLast }) {
           <span style={{color:'#7070a0',fontSize:'12px',fontStyle:'italic'}}>{msg._pending}</span>
         )}
         {msg.content && <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} />}
+        <span className="msg-actions">
+          {msg.role === 'user' && onEditMessage && (
+            <button className="msg-action-btn" title="Edit and resend"
+              onClick={() => { setEditText(msg.content); setEditing(true) }}>✏️</button>
+          )}
+          {onDeleteMessage && (
+            <button className="msg-action-btn" title="Delete message"
+              onClick={() => onDeleteMessage(msg)}>🗑️</button>
+          )}
+        </span>
       </div>
       {msg.role === 'assistant' && msg.done && !feedbackDone && (
         <div className="feedback-bar">
@@ -63,7 +95,7 @@ function Message({ msg, onFeedback, onSpeak, onRegenerate, isLast }) {
   )
 }
 
-export default function MessageList({ messages, onFeedback, onSpeak, onRegenerate, onOpenArtifact }) {
+export default function MessageList({ messages, onFeedback, onSpeak, onRegenerate, onDeleteMessage, onEditMessage, onOpenArtifact }) {
   const bottomRef = useRef(null)
   const containerRef = useRef(null)
 
@@ -109,7 +141,8 @@ export default function MessageList({ messages, onFeedback, onSpeak, onRegenerat
       )}
       {messages.map(msg => (
         <Message key={msg.id} msg={msg} onFeedback={onFeedback} onSpeak={onSpeak}
-          onRegenerate={onRegenerate} isLast={msg.id === lastAssistantId} />
+          onRegenerate={onRegenerate} onDeleteMessage={onDeleteMessage} onEditMessage={onEditMessage}
+          isLast={msg.id === lastAssistantId} />
       ))}
       <div ref={bottomRef} />
     </div>

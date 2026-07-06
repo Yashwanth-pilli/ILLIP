@@ -14,6 +14,7 @@ import Toasts from './components/Toasts.jsx'
 import GamesModal from './components/dialogs/GamesModal.jsx'
 import AgentsRunPanel from './components/AgentsRunPanel.jsx'
 import TerminalPanel from './components/TerminalPanel.jsx'
+import { ILLIP_GUIDE } from './guide.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -373,6 +374,14 @@ export default function App() {
       return
     }
 
+    // Slash command: /illip [guide] · /guide · /help — the ILLIP tour, instant, no LLM.
+    if (typeof message === 'string' &&
+        ['/illip', '/illip guide', '/guide', '/help'].includes(message.trim().toLowerCase())) {
+      addMessage('user', message.trim())
+      addMessage('assistant', ILLIP_GUIDE, { done: true })
+      return
+    }
+
     // Slash commands that call a backend route and render its markdown report.
     const reportCommands = [
       { cmd: '/idea', run: (arg) => api.ideaJourney(arg), wait: '💡 Analyzing your idea, searching similar work, building your step plan…', needArg: 'Tell me the idea: `/idea an app that helps farmers detect crop disease from photos`' },
@@ -574,6 +583,24 @@ export default function App() {
     })
     handleChat(lastUser.content)
   }, [messages, isLoading]) // eslint-disable-line
+
+  // ── Delete / edit a sent message ─────────────────────────────────────────────
+  const deleteMessage = useCallback((msg) => {
+    setMessages(prev => prev.filter(m => m.id !== msg.id))
+    // Best-effort disk removal; slash-command outputs aren't on disk — fine.
+    api.chatDeleteMessage(msg.role, msg.content).catch(() => {})
+  }, [])
+
+  const editMessage = useCallback(async (msg, newText) => {
+    if (!newText.trim() || isLoading) return
+    // Forget the old message and every reply after it, then resend the new text.
+    setMessages(prev => {
+      const idx = prev.findIndex(m => m.id === msg.id)
+      return idx === -1 ? prev : prev.slice(0, idx)
+    })
+    try { await api.chatRewind(msg.content) } catch { /* not on disk — fine */ }
+    handleChat(newText.trim())
+  }, [isLoading]) // eslint-disable-line
 
   // ── TTS ─────────────────────────────────────────────────────────────────────
   const speakText = useCallback((text) => {
@@ -874,6 +901,8 @@ export default function App() {
           onChat={handleChat}
           onStop={stopGeneration}
           onRegenerate={regenerate}
+          onDeleteMessage={deleteMessage}
+          onEditMessage={editMessage}
           onOpenArtifact={setArtifactHtml}
           artifactHtml={artifactHtml}
           onCloseArtifact={() => setArtifactHtml(null)}
