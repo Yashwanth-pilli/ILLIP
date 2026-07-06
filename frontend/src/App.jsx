@@ -15,7 +15,6 @@ import MarketplaceModal from './components/dialogs/MarketplaceModal.jsx'
 import Toasts from './components/Toasts.jsx'
 import GamesModal from './components/dialogs/GamesModal.jsx'
 import AgentsRunPanel from './components/AgentsRunPanel.jsx'
-import TerminalPanel from './components/TerminalPanel.jsx'
 import { ILLIP_GUIDE } from './guide.js'
 
 marked.setOptions({ breaks: true, gfm: true })
@@ -134,8 +133,6 @@ export default function App() {
   // ── Agent company (live orchestration) ────────────────────────────────────────
   const [agentTask, setAgentTask] = useState(null)
 
-  // ── Terminal ──────────────────────────────────────────────────────────────────
-  const [terminalOpen, setTerminalOpen] = useState(false)
   // Diagnostics/repair (/doctor, /heal) render in an ephemeral overlay, never chat.
   const [diagnostic, setDiagnostic] = useState(null)  // { title, md, busy, kind } | null
 
@@ -398,11 +395,6 @@ export default function App() {
       return
     }
 
-    // Slash command: /terminal — open the terminal. No LLM call.
-    if (typeof message === 'string' && message.trim().toLowerCase() === '/terminal') {
-      setTerminalOpen(true)
-      return
-    }
 
     // Slash command: /loop <goal> — agent company loops until QA passes.
     if (typeof message === 'string' && message.trim().toLowerCase().startsWith('/loop')) {
@@ -990,7 +982,6 @@ export default function App() {
           artifactHtml={artifactHtml}
           onCloseArtifact={() => setArtifactHtml(null)}
           onOpenGames={() => setGamesOpen(true)}
-          onOpenTerminal={() => setTerminalOpen(true)}
           onToggleForceLarge={() => setForceLarge(p => !p)}
           onToggleForceSearch={() => setForceSearch(p => !p)}
           onMic={toggleMic}
@@ -1097,7 +1088,6 @@ export default function App() {
       )}
       {gamesOpen && <GamesModal onClose={() => setGamesOpen(false)} />}
       {agentTask && <AgentsRunPanel task={agentTask.goal || agentTask} loop={!!agentTask.loop} onClose={() => setAgentTask(null)} />}
-      {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
 
       {diagnostic && (
         <DiagnosticPanel

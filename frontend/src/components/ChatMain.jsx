@@ -19,7 +19,6 @@ const SLASH_COMMANDS = [
   { cmd: '/scan',      desc: 'Scan a downloaded file for malware signs' },
   { cmd: '/remind',    desc: 'Set a daily reminder — /remind HH:MM …' },
   { cmd: '/reminders', desc: 'List your reminders' },
-  { cmd: '/terminal',  desc: 'Open a real terminal' },
   { cmd: '/guide',     desc: 'Show the ILLIP tour' },
 ]
 
@@ -31,7 +30,7 @@ export default function ChatMain({
   browserOpen, browserSteps, browserScreen, browserResult, isBrowsing,
   hasSavedSession, onClearBrowserSession,
   imagePanelOpen, videoPanelOpen, activeModel,
-  onChat, onStop, onRegenerate, onDeleteMessage, onEditMessage, onOpenArtifact, artifactHtml, onCloseArtifact, onOpenGames, onOpenTerminal,
+  onChat, onStop, onRegenerate, onDeleteMessage, onEditMessage, onOpenArtifact, artifactHtml, onCloseArtifact, onOpenGames,
   onToggleForceLarge, onToggleForceSearch, onMic, onSetPendingImage, onSetPendingDocument, onUploadFile,
   onStartResearch, onCloseResearch, onSetResearchDepth,
   onOpenBrowser, onCloseBrowser, onRunBrowser,
@@ -216,11 +215,6 @@ export default function ChatMain({
             }}
             title="Type what to build, then hit Team to run it through the agent crew"
           >🏢 Team</button>
-          <button
-            className="action-btn term-open"
-            onClick={onOpenTerminal}
-            title="Open a real terminal"
-          >▶ Terminal</button>
         </div>
 
         {/* Image preview */}
