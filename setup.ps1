@@ -214,6 +214,18 @@ if (Test-Path $iconPath) { $lnk.IconLocation = $iconPath }
 $lnk.Save()
 Ok "Desktop shortcut 'ILLIP Cat' created."
 
+# -- Add ILLIP to PATH so 'illip' works from any terminal ---------------------
+Step "Adding 'illip' command to your PATH..."
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($userPath -split ';' -contains $Root) {
+    Ok "'illip' already on PATH."
+} else {
+    if ([string]::IsNullOrEmpty($userPath)) { $newPath = $Root }
+    else { $newPath = $userPath.TrimEnd(';') + ';' + $Root }
+    [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+    Ok "Added 'illip' to PATH. Open a NEW terminal, then type: illip"
+}
+
 # -- Done ---------------------------------------------------------------------
 Say ""
 Say "==========================================" Green
