@@ -209,6 +209,8 @@ $lnk.TargetPath = Join-Path $venvPath "Scripts\pythonw.exe"
 $lnk.Arguments = '"' + (Join-Path $Root "scripts\illip_cat.pyw") + '"'
 $lnk.WorkingDirectory = $Root
 $lnk.Description = "Click the cat to start ILLIP"
+$iconPath = Join-Path $Root "assets\illip-icon.ico"
+if (Test-Path $iconPath) { $lnk.IconLocation = $iconPath }
 $lnk.Save()
 Ok "Desktop shortcut 'ILLIP Cat' created."
 

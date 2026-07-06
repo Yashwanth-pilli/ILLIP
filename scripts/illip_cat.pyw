@@ -17,9 +17,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POS_FILE = ROOT / "data" / "cat_pos.json"
+ICON_FILE = Path(__file__).resolve().parent / "illip_cat_icon.png"
 PORT = 8000
 URL = f"http://localhost:{PORT}"
-TRANSPARENT = "#010203"  # unlikely-to-appear color used as the transparency key
+TRANSPARENT = "#010203"  # unlikely-to-appear color used as the transparency key;
+                         # also the exact fill baked outside the circle in illip_cat_icon.png
 
 
 def server_up() -> bool:
@@ -47,10 +49,13 @@ class Cat:
         self.root.configure(bg=TRANSPARENT)
         self.root.attributes("-transparentcolor", TRANSPARENT)
 
+        self.icon_img = tk.PhotoImage(file=str(ICON_FILE)) if ICON_FILE.exists() else None
         self.label = tk.Label(
-            self.root, text="🐱", font=("Segoe UI Emoji", 30),
+            self.root, image=self.icon_img, font=("Segoe UI Emoji", 30),
             bg=TRANSPARENT, cursor="hand2",
         )
+        if self.icon_img is None:
+            self.label.config(text="🐱")  # fallback if the icon asset is missing
         self.label.pack()
 
         x, y = self._load_pos()
@@ -112,19 +117,25 @@ class Cat:
             webbrowser.open(URL)
             return
         self._busy = True
-        self.label.config(text="⏳")
+        self.label.config(image="", text="⏳")
         start_server()
         self._wait_for_server(tries=40)  # up to ~60 s for a cold start
 
+    def _reset_icon(self):
+        if self.icon_img is not None:
+            self.label.config(image=self.icon_img, text="")
+        else:
+            self.label.config(image="", text="🐱")
+
     def _wait_for_server(self, tries):
         if server_up():
-            self.label.config(text="🐱")
+            self._reset_icon()
             self._busy = False
             webbrowser.open(URL)
         elif tries <= 0:
-            self.label.config(text="😿")
+            self.label.config(image="", text="😿")
             self._busy = False
-            self.root.after(4000, lambda: self.label.config(text="🐱"))
+            self.root.after(4000, self._reset_icon)
         else:
             self.root.after(1500, lambda: self._wait_for_server(tries - 1))
 

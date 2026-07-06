@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/illip-logo.png" alt="ILLIP" width="180" /></p>
+
 # ILLIP AI — v3.1
 
 **Your AI company, in your device.**
