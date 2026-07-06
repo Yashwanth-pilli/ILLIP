@@ -14,6 +14,7 @@ from app.skills.builtin.package_installer import PackageInstallerSkill
 from app.skills.builtin.vision_skill import VisionSkill
 from app.skills.builtin.shell_skill import ShellSkill
 from app.skills.builtin.computer_skill import OpenAppSkill, FindFilesSkill, ReadAnywhereSkill, ScanFileSkill
+from app.skills.builtin.system_skill import SystemHealthSkill, CleanJunkSkill
 
 
 def _register_builtins() -> None:
@@ -32,6 +33,8 @@ def _register_builtins() -> None:
     reg.register(FindFilesSkill())
     reg.register(ReadAnywhereSkill())
     reg.register(ScanFileSkill())
+    reg.register(SystemHealthSkill())
+    reg.register(CleanJunkSkill())
 
 
 _register_builtins()
