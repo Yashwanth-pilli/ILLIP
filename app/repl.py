@@ -53,6 +53,30 @@ def _p(text: str = "", end: str = "\n") -> None:
     sys.stdout.flush()
 
 
+# Pure-ASCII figlet logo — renders on any console (no box-drawing chars).
+_LOGO = r"""
+  _____ _      _      _____ _____
+ |_   _| |    | |    |_   _|  __ \
+   | | | |    | |      | | | |__) |
+   | | | |    | |      | | |  ___/
+  _| |_| |____| |____ _| |_| |
+ |_____|______|______|_____|_|
+"""
+
+
+def _banner(launch_dir) -> None:
+    """Big clear ILLIP logo, then the working area below."""
+    import os
+    os.system("")  # enable ANSI colors on Windows 10+ (no-op elsewhere)
+    C, DIM, R = "\033[36m", "\033[90m", "\033[0m"  # cyan, grey, reset
+    _p(C + _LOGO + R)
+    _p(DIM + "  your AI company — right here in your terminal" + R)
+    _p(DIM + "  " + "-" * 52 + R)
+    _p(f"  working in : {launch_dir}")
+    _p(DIM + "  commands   : /exit   /clear   /reset" + R)
+    _p("")
+
+
 async def _run(resume: bool) -> None:
     # Quiet internal logs — this is a clean interactive surface.
     import logging
@@ -83,14 +107,13 @@ async def _run(resume: bool) -> None:
     )
     messages: list[Message] = [Message(role="system", content=system_prompt, timestamp=get_current_timestamp())]
 
+    _banner(launch_dir)
+
     history = _load_session() if resume else []
     if resume and history:
         for h in history:
             messages.append(Message(role=h["role"], content=h["content"], timestamp=get_current_timestamp()))
-        _p(f"[resumed {len(history)} messages from your last session]\n")
-
-    _p("ILLIP terminal — type your message. Commands: /exit  /clear  /reset")
-    _p(f"Working in: {launch_dir}\n")
+        _p(f"  [resumed {len(history)} messages from your last session]\n")
 
     while True:
         try:
