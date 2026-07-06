@@ -145,6 +145,27 @@ def _should_search(message: str) -> bool:
     return any(p.search(msg) for p in _SEARCH_RE)
 
 
+# Intents that MUST run real tools (file/system/code exec) — otherwise a
+# reasoning model will happily role-play the result: invent file paths, fake
+# file contents, pretend it ran something. If any of these match, force the
+# tool loop even when the message is short enough to look "simple".
+_NEEDS_TOOLS = [
+    r'\b(grab|read|open|show|cat|print|display|find|locate|get|fetch)\b.{0,30}\b(file|files|folder|dir|directory|script|\.py|\.js|\.txt|\.json|\.md|\.csv)\b',
+    r'\b(what|which|list|show)\b.{0,20}\b(files?|folders?|in my (workspace|folder|directory))\b',
+    r'\b(save|write|create|make|delete|remove|move|rename)\b.{0,30}\b(file|folder|to disk|to a file)\b',
+    r'\b(run|execute)\b.{0,20}\b(this|the|my|python|script|code|command|it)\b',
+    r'\b(open|launch|start)\b.{0,20}\b(app|application|browser|program|chrome|notepad)\b',
+    r'\bin my (workspace|downloads|desktop|documents|folder)\b',
+    r'/[A-Za-z]',   # any path-looking token
+]
+_NEEDS_TOOLS_RE = [re.compile(p, re.IGNORECASE) for p in _NEEDS_TOOLS]
+
+
+def _needs_tools(message: str) -> bool:
+    """True when the request needs real tool execution, not a chat reply."""
+    return any(p.search(message) for p in _NEEDS_TOOLS_RE)
+
+
 async def route(message: str, ceiling_model: str = None) -> dict:
     """
     ceiling_model = user's dropdown selection (max allowed model).
@@ -195,8 +216,9 @@ async def route(message: str, ceiling_model: str = None) -> dict:
     from app.hardware.guard import get_safe_context_limit
     ctx = get_safe_context_limit(hw, requested=8192)
     needs_search = _should_search(message)
+    needs_tools = _needs_tools(message)
 
-    logger.info(f"Router: complexity={complexity} pressure={hw.pressure} search={needs_search} -> {model}")
+    logger.info(f"Router: complexity={complexity} pressure={hw.pressure} search={needs_search} tools={needs_tools} -> {model}")
 
     return {
         "model": model,
@@ -209,4 +231,5 @@ async def route(message: str, ceiling_model: str = None) -> dict:
         "reason": reason,
         "warning": warning,
         "needs_search": needs_search,
+        "needs_tools": needs_tools,
     }

@@ -9,6 +9,7 @@ import PluginDialog from './components/dialogs/PluginDialog.jsx'
 import InstallSkillDialog from './components/dialogs/InstallSkillDialog.jsx'
 import NewProjectDialog from './components/dialogs/NewProjectDialog.jsx'
 import NewChatChoiceDialog from './components/dialogs/NewChatChoiceDialog.jsx'
+import DiagnosticPanel from './components/DiagnosticPanel.jsx'
 import CreateJobModal from './components/dialogs/CreateJobModal.jsx'
 import MarketplaceModal from './components/dialogs/MarketplaceModal.jsx'
 import Toasts from './components/Toasts.jsx'
@@ -135,6 +136,8 @@ export default function App() {
 
   // ── Terminal ──────────────────────────────────────────────────────────────────
   const [terminalOpen, setTerminalOpen] = useState(false)
+  // Diagnostics/repair (/doctor, /heal) render in an ephemeral overlay, never chat.
+  const [diagnostic, setDiagnostic] = useState(null)  // { title, md, busy, kind } | null
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const activeModelRef = useRef('')
@@ -368,6 +371,25 @@ export default function App() {
     }
   }, [addMessage, loadModels, showGhostBadge])
 
+  // ── Diagnostics/repair — run in the ephemeral overlay, keep chat clean ───────
+  const runDiagnostic = useCallback(async (kind) => {
+    const meta = kind === 'heal'
+      ? { title: '🔧 Repair', api: api.doctorHeal, rerunLabel: '↻ Repair again' }
+      : { title: '🩺 Diagnostics', api: api.doctor, rerunLabel: '↻ Run again' }
+    setDiagnostic({ title: meta.title, md: '', busy: true, kind, rerunLabel: meta.rerunLabel })
+    try {
+      const d = await meta.api()
+      let md = d.report_md
+      if (!md && kind === 'heal') {
+        const acts = (d.recent_actions || []).map(a => `- ${a}`).join('\n')
+        md = `**${d.message}**${acts ? `\n\n_Recent actions:_\n${acts}` : ''}`
+      }
+      setDiagnostic({ title: meta.title, md: md || 'No report returned.', busy: false, kind, rerunLabel: meta.rerunLabel })
+    } catch (e) {
+      setDiagnostic({ title: meta.title, md: `**Failed:** ${e.message}`, busy: false, kind, rerunLabel: meta.rerunLabel })
+    }
+  }, [])
+
   // ── Chat ────────────────────────────────────────────────────────────────────
   const handleChat = useCallback(async (message, imageFile = null, docFile = null) => {
     // Slash command: /game — open the arcade. No LLM call.
@@ -466,20 +488,10 @@ export default function App() {
       }
     }
 
-    // Slash command: /doctor — run diagnostics, render inline. No LLM call.
-    if (typeof message === 'string' && message.trim().toLowerCase() === '/doctor') {
-      addMessage('user', '/doctor')
-      addMessage('assistant', '🩺 Running diagnostics…')
-      try {
-        const d = await api.doctor()
-        setMessages(prev => prev.slice(0, -1))
-        addMessage('assistant', d.report_md || 'No report returned.', { done: true })
-      } catch (e) {
-        setMessages(prev => prev.slice(0, -1))
-        addMessage('assistant', `**Doctor failed:** ${e.message}`)
-      }
-      return
-    }
+    // Slash commands: /doctor, /heal — run in the diagnostics overlay, NOT chat.
+    const dtrim = typeof message === 'string' ? message.trim().toLowerCase() : ''
+    if (dtrim === '/doctor') { runDiagnostic('doctor'); return }
+    if (dtrim === '/heal' || dtrim === '/repair') { runDiagnostic('heal'); return }
 
     // Show user message immediately
     if (docFile) {
@@ -625,7 +637,7 @@ export default function App() {
       abortRef.current = null
       setIsLoading(false)
     }
-  }, [pinnedModel, forceLarge, forceSearch, activeProject, autoSpeak, addMessage, activeDocument])
+  }, [pinnedModel, forceLarge, forceSearch, activeProject, autoSpeak, addMessage, activeDocument, runDiagnostic])
 
   // ── Regenerate ────────────────────────────────────────────────────────────────
   const regenerate = useCallback(() => {
@@ -1086,6 +1098,17 @@ export default function App() {
       {gamesOpen && <GamesModal onClose={() => setGamesOpen(false)} />}
       {agentTask && <AgentsRunPanel task={agentTask.goal || agentTask} loop={!!agentTask.loop} onClose={() => setAgentTask(null)} />}
       {terminalOpen && <TerminalPanel onClose={() => setTerminalOpen(false)} />}
+
+      {diagnostic && (
+        <DiagnosticPanel
+          title={diagnostic.title}
+          md={diagnostic.md}
+          busy={diagnostic.busy}
+          rerunLabel={diagnostic.rerunLabel}
+          onRerun={() => runDiagnostic(diagnostic.kind)}
+          onClose={() => setDiagnostic(null)}
+        />
+      )}
 
       <Toasts toasts={toasts} onDismiss={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
     </div>

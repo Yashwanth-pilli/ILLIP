@@ -35,8 +35,20 @@ class ReadFileSkill(BaseSKill):
         # Sandbox: must stay inside workspace
         if not str(target).startswith(str(workspace)):
             return "Error: Access denied — path is outside the workspace directory."
+
+        # If the direct path misses, try a recursive search for the bare filename
+        # so "read realtest.py" works even when it lives in a subfolder — the model
+        # doesn't have to chain find_files → read_file itself.
         if not target.exists():
-            return f"Error: File not found: {path}"
+            name = Path(path).name
+            matches = [p for p in workspace.rglob(name) if p.is_file()]
+            if len(matches) == 1:
+                target = matches[0].resolve()
+            elif len(matches) > 1:
+                rels = "\n".join(f"- {m.relative_to(workspace)}" for m in matches[:10])
+                return f"Multiple files named '{name}' found — specify which:\n{rels}"
+            else:
+                return f"Error: File not found: {path}"
         if not target.is_file():
             return f"Error: '{path}' is not a file."
 

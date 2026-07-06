@@ -121,11 +121,16 @@ class OllamaProvider(BaseProvider):
         chosen_model = model or self.model
         from app.hardware.speed_optimizer import get_warmed_ctx, mark_warmed, KEEP_ALIVE_SECONDS
 
-        is_warmed = get_warmed_ctx(chosen_model, fallback=None) is not None
+        warmed_ctx = get_warmed_ctx(chosen_model, fallback=None)
+        # Only treat as "warmed" (skip Ghost reload) if the loaded ctx actually
+        # fits what the caller asked for. A stale small warmed ctx (e.g. 2048
+        # from a past pressure cap) must NOT override a larger requested num_ctx,
+        # or every real prompt 400s. Reload at the requested size instead.
+        is_warmed = warmed_ctx is not None and warmed_ctx >= num_ctx
 
         if is_warmed:
-            # Model already in VRAM — send minimal opts to avoid reload penalty (~30s)
-            effective_ctx = get_warmed_ctx(chosen_model, fallback=num_ctx)
+            # Model already in VRAM at a sufficient ctx — skip reload penalty (~30s)
+            effective_ctx = warmed_ctx
             opts = {
                 "temperature": temperature,
                 "num_ctx": effective_ctx,

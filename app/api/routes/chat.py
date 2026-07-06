@@ -153,6 +153,13 @@ async def stream_chat_message(request: ChatRequest):
 
         chat_service = get_chat_service()
         ctx_limit_use = get_warmed_ctx(chosen_model, fallback=ctx_limit) if is_simple else ctx_limit
+        # Floor the context. The warmed cache can hold a tiny value (e.g. 2048,
+        # left over from an earlier critical-pressure cap). System prompt + memory
+        # + tool specs routinely hit ~5000 tokens, so trusting a stale small ctx
+        # makes every request 400 then pay a reload. Floor to 8192 (what the Ghost
+        # plan uses for ornith/qwen on this GPU anyway) unless genuinely critical.
+        if routing["pressure"] != "critical":
+            ctx_limit_use = max(ctx_limit_use, 8192)
 
         # Run memory + optional search concurrently
         memories_task = asyncio.create_task(
@@ -230,7 +237,8 @@ async def stream_chat_message(request: ChatRequest):
         collected = []
 
         active_messages = list(messages)
-        run_tools = (not is_simple or request.force_tools) and tool_specs and hasattr(provider, "generate_with_tools")
+        tool_findings = []  # (name, result) — folded into the fallback prompt as plain text
+        run_tools = (not is_simple or request.force_tools or routing.get("needs_tools")) and tool_specs and hasattr(provider, "generate_with_tools")
         if run_tools:
             MAX_TOOL_ROUNDS = 3
             for _ in range(MAX_TOOL_ROUNDS):
@@ -252,16 +260,44 @@ async def stream_chat_message(request: ChatRequest):
                 )
                 for call in tool_calls:
                     result = await registry.run(call["name"], call.get("arguments", {}))
+                    tool_findings.append((call["name"], result))
                     yield f"data: {json.dumps({'tool_result': {'name': call['name'], 'result': result[:200]}})}\n\n"
                     active_messages.append(
                         Message(role="tool", content=result, timestamp=ts())
                     )
-            else:
-                active_messages = list(messages)
 
         if not collected:
+            # Fallback to a plain stream. NEVER pass role="tool" messages here —
+            # stream_response omits the tools field, and some model templates
+            # (ornith) crash trying to render a bare tool message ("Unable to
+            # generate parser for this template"). Fold real tool results into
+            # a text block on the base messages instead, so the model answers
+            # FROM the actual findings and can't fabricate a fake file/result.
+            fallback_messages = list(messages)
+            if tool_findings:
+                findings_text = "\n\n".join(
+                    f"[Tool '{name}' returned]:\n{result}" for name, result in tool_findings
+                )
+                # Fold findings into the LAST user message, not a trailing system
+                # message. Ornith's chat template only accepts a system message at
+                # the very start — a system message after the user turn crashes it
+                # ("Unable to generate parser for this template"). Editing the user
+                # turn keeps the standard system→user structure every template handles.
+                for i in range(len(fallback_messages) - 1, -1, -1):
+                    if fallback_messages[i].role == "user":
+                        fallback_messages[i] = Message(
+                            role="user",
+                            content=(
+                                fallback_messages[i].content
+                                + "\n\n---\nTool results (answer using ONLY these — do not "
+                                "invent files, paths, or contents beyond them):\n\n"
+                                + findings_text
+                            ),
+                            timestamp=ts(),
+                        )
+                        break
             async for token in provider.stream_response(
-                active_messages, model=chosen_model, num_ctx=ctx_limit_use
+                fallback_messages, model=chosen_model, num_ctx=ctx_limit_use
             ):
                 collected.append(token)
                 yield f"data: {json.dumps({'token': token})}\n\n"

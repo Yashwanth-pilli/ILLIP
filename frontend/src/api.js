@@ -10,6 +10,7 @@ export const api = {
   systemHardware: () => fetch(`${BASE}/system/hardware`).then(r => r.json()),
   systemHardwareLive: () => fetch(`${BASE}/system/hardware/live`).then(r => r.json()),
   doctor: () => fetch(`${BASE}/system/doctor`).then(r => r.json()),
+  doctorHeal: () => fetch(`${BASE}/system/doctor/heal`, { method: 'POST' }).then(r => r.json()),
   switchModel: (model) => fetch(`${BASE}/system/models/switch`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model }),

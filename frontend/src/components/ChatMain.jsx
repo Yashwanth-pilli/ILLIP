@@ -7,6 +7,22 @@ import ImagePanel from './ImagePanel.jsx'
 import VideoPanel from './VideoPanel.jsx'
 import ArtifactPane from './ArtifactPane.jsx'
 
+// Known slash commands — drives the highlight hint bar above the input.
+const SLASH_COMMANDS = [
+  { cmd: '/task',      desc: 'Run a goal through the agent crew (live)' },
+  { cmd: '/loop',      desc: 'Agent crew loops until QA passes' },
+  { cmd: '/doctor',    desc: 'Run diagnostics (opens a panel, not chat)' },
+  { cmd: '/heal',      desc: 'Auto-repair Ollama/model issues' },
+  { cmd: '/idea',      desc: 'Analyze an idea + build a step plan' },
+  { cmd: '/stuck',     desc: 'Get your next step' },
+  { cmd: '/opps',      desc: 'Find live opportunities for your field' },
+  { cmd: '/scan',      desc: 'Scan a downloaded file for malware signs' },
+  { cmd: '/remind',    desc: 'Set a daily reminder — /remind HH:MM …' },
+  { cmd: '/reminders', desc: 'List your reminders' },
+  { cmd: '/terminal',  desc: 'Open a real terminal' },
+  { cmd: '/guide',     desc: 'Show the ILLIP tour' },
+]
+
 export default function ChatMain({
   messages, isLoading, forceLarge, forceSearch, pressureBanner,
   voiceAvailable, isRecording, voiceStatus, autoSpeak, pendingImage, pendingDocument,
@@ -24,6 +40,16 @@ export default function ChatMain({
 }) {
   const [inputValue, setInputValue] = useState('')
   const inputRef = useRef(null)
+
+  // Slash-command matching for the hint bar + input highlight
+  const trimmedInput = inputValue.trim()
+  const firstWord = trimmedInput.split(/\s+/)[0].toLowerCase()
+  const isSlashCommand = trimmedInput.startsWith('/') &&
+    SLASH_COMMANDS.some(c => c.cmd === firstWord)
+  const exactSlash = SLASH_COMMANDS.find(c => c.cmd === firstWord)?.cmd || null
+  const slashMatches = trimmedInput.startsWith('/') && !trimmedInput.includes(' ')
+    ? SLASH_COMMANDS.filter(c => c.cmd.startsWith(trimmedInput.toLowerCase()))
+    : []
 
   // Voice transcription inserts text
   useEffect(() => {
@@ -238,11 +264,28 @@ export default function ChatMain({
         {imagePanelOpen && <ImagePanel onClose={onCloseImage} />}
         {videoPanelOpen && <VideoPanel onClose={onCloseVideo} />}
 
+        {/* Slash-command hint bar — appears while typing a "/…" command */}
+        {slashMatches.length > 0 && (
+          <div className="slash-hints">
+            {slashMatches.map(c => (
+              <button
+                key={c.cmd}
+                type="button"
+                className={`slash-hint ${c.cmd === exactSlash ? 'exact' : ''}`}
+                onClick={() => { setInputValue(c.cmd + ' '); inputRef.current?.focus() }}
+              >
+                <span className="slash-hint-cmd">{c.cmd}</span>
+                <span className="slash-hint-desc">{c.desc}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Chat form */}
         <form className="chat-form" onSubmit={handleSubmit}>
           <textarea
             ref={inputRef}
-            className="message-input"
+            className={`message-input ${isSlashCommand ? 'slash-active' : ''}`}
             rows={1}
             value={inputValue}
             onChange={e => {
