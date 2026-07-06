@@ -42,6 +42,10 @@ async def lifespan(app: FastAPI):
     from app.services.self_heal import start_self_heal
     start_self_heal()
 
+    # Start Downloads watcher — warns about risky new downloads automatically
+    from app.services.download_watch import start_download_watch
+    start_download_watch()
+
     # Start observability metrics collector
     from app.monitoring.collector import get_metrics_collector
     get_metrics_collector().start()

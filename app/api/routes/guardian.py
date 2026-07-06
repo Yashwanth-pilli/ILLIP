@@ -30,6 +30,13 @@ async def scan_route(req: ScanRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/alerts")
+async def guardian_alerts():
+    """Drain pending auto-watch alerts for new risky downloads."""
+    from app.services.download_watch import drain_alerts
+    return {"alerts": drain_alerts()}
+
+
 @router.post("/getsafe")
 async def getsafe_route(req: GetSafeRequest):
     """Pre-download safety guide: reputation check + tailored safe steps."""

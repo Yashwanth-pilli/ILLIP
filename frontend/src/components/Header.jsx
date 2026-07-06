@@ -27,6 +27,7 @@ export default function Header({
   dismissedSuggestion, projects, activeProject, hwLive, isLoading,
   onSwitchModel, onSwitchProject, onDismissSuggestion, onNewProject,
   onRefresh, onAutoSpeak, autoSpeak, onDeleteProject,
+  chatModes = {}, onToggleChatMode,
 }) {
   const pressure = hwLive?.pressure || 'low'
   const catClass = `cat-wrap pressure-${pressure}${isLoading ? ' thinking' : ''}`
@@ -88,6 +89,20 @@ export default function Header({
             title="Auto-speak responses"
           >
             {autoSpeak ? '🔊 Speak' : '🔇 Speak'}
+          </button>
+          <button
+            className={`mode-btn ${chatModes.caveman ? 'active' : ''}`}
+            onClick={() => onToggleChatMode && onToggleChatMode('caveman')}
+            title="Caveman mode — terse, faster replies on local hardware"
+          >
+            🗿 Caveman
+          </button>
+          <button
+            className={`mode-btn ${chatModes.ponytail ? 'active' : ''}`}
+            onClick={() => onToggleChatMode && onToggleChatMode('ponytail')}
+            title="Ponytail mode — simplest solution, flags over-engineering"
+          >
+            🐴 Ponytail
           </button>
         </div>
 

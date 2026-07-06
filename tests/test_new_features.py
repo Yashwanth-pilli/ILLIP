@@ -116,3 +116,61 @@ async def test_getsafe_empty_query():
     from app.services.file_guardian import get_safe_advice
     r = await get_safe_advice("")
     assert "download" in r.lower()
+
+
+# ── gstack skill (agent-callable wrapper) ─────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gstack_skill_wraps_report(tmp_path):
+    from app.skills.builtin.gstack_skill import GstackSkill
+    r = await GstackSkill().execute(path=str(tmp_path))
+    assert "not a git repository" in r
+
+
+def test_gstack_skill_registered():
+    from app.skills.registry import get_registry
+    assert get_registry().get("git_status") is not None
+
+
+# ── download auto-watch ───────────────────────────────────────────────────────
+
+def test_download_watch_primes_then_alerts(tmp_path, monkeypatch):
+    import app.services.download_watch as dw
+    # Point the watcher at a temp "Downloads" and reset its state.
+    monkeypatch.setattr(dw, "_downloads_dir", lambda: tmp_path)
+    monkeypatch.setattr(dw, "_seen", set())
+    monkeypatch.setattr(dw, "_alerts", [])
+    monkeypatch.setattr(dw, "_primed", False)
+    monkeypatch.setattr(dw, "_SETTLE_SECONDS", 0)
+
+    # A disguised executable: report.pdf.exe
+    bad = tmp_path / "report.pdf.exe"
+    bad.write_bytes(b"MZ\x00\x00fake")
+
+    dw._scan_new_files()          # prime pass — records backlog, no alerts
+    dw._primed = True
+    assert dw.drain_alerts() == []
+
+    # New risky file arrives after priming.
+    bad2 = tmp_path / "invoice.pdf.exe"
+    bad2.write_bytes(b"MZ\x00\x00fake")
+    dw._scan_new_files()
+    alerts = dw.drain_alerts()
+    invoice = [a for a in alerts if a["file"] == "invoice.pdf.exe"]
+    assert invoice and invoice[0]["level"] == "danger"
+    # The primed backlog file must never alert.
+    assert not any(a["file"] == "report.pdf.exe" for a in alerts)
+    assert dw.drain_alerts() == []   # drained, not repeated
+
+
+def test_download_watch_skips_partial(tmp_path, monkeypatch):
+    import app.services.download_watch as dw
+    monkeypatch.setattr(dw, "_downloads_dir", lambda: tmp_path)
+    monkeypatch.setattr(dw, "_seen", set())
+    monkeypatch.setattr(dw, "_alerts", [])
+    monkeypatch.setattr(dw, "_primed", True)
+    monkeypatch.setattr(dw, "_SETTLE_SECONDS", 0)
+    part = tmp_path / "game.exe.crdownload"
+    part.write_bytes(b"MZ\x00\x00 still downloading")
+    dw._scan_new_files()
+    assert dw.drain_alerts() == []   # partial download ignored

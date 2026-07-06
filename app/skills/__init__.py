@@ -16,6 +16,7 @@ from app.skills.builtin.shell_skill import ShellSkill
 from app.skills.builtin.computer_skill import OpenAppSkill, FindFilesSkill, ReadAnywhereSkill, ScanFileSkill
 from app.skills.builtin.system_skill import SystemHealthSkill, CleanJunkSkill
 from app.skills.builtin.file_ops_skill import MoveFileSkill, CopyFileSkill
+from app.skills.builtin.gstack_skill import GstackSkill
 
 
 def _register_builtins() -> None:
@@ -38,6 +39,7 @@ def _register_builtins() -> None:
     reg.register(CleanJunkSkill())
     reg.register(MoveFileSkill())
     reg.register(CopyFileSkill())
+    reg.register(GstackSkill())
 
 
 _register_builtins()

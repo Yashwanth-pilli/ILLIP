@@ -77,6 +77,7 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState(null)
   const [hardwareStatus, setHardwareStatus] = useState(null)
   const [hwLive, setHwLive] = useState(null)
+  const [chatModes, setChatModes] = useState({ caveman: false, ponytail: false })
   const [skills, setSkills] = useState([])
   const [plugins, setPlugins] = useState([])
   const [healthData, setHealthData] = useState(null)
@@ -126,6 +127,44 @@ export default function App() {
     setToasts(prev => [...prev, { id, msg, kind, icon }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 6000)
   }, [])
+
+  // ── Reply-style modes (caveman / ponytail) ──────────────────────────────────
+  const loadChatModes = useCallback(async () => {
+    try {
+      const d = await api.getChatModes()
+      const state = {}
+      for (const m of d.modes || []) state[m.name] = m.enabled
+      setChatModes(prev => ({ ...prev, ...state }))
+    } catch {}
+  }, [])
+
+  const toggleChatMode = useCallback(async (name) => {
+    const next = !chatModes[name]
+    setChatModes(prev => ({ ...prev, [name]: next }))  // optimistic
+    try {
+      await api.setChatMode(name, next)
+      pushToast(
+        `${name === 'caveman' ? '🗿 Caveman' : '🐴 Ponytail'} mode ${next ? 'on' : 'off'}`,
+        'ok', next ? '✅' : '⚪',
+      )
+    } catch {
+      setChatModes(prev => ({ ...prev, [name]: !next }))  // revert on failure
+    }
+  }, [chatModes, pushToast])
+
+  // ── Guardian auto-watch: surface risky new downloads as toasts ───────────────
+  const pollGuardianAlerts = useCallback(async () => {
+    try {
+      const d = await api.guardianAlerts()
+      for (const a of d.alerts || []) {
+        pushToast(
+          `${a.file}: ${a.message} — type "/scan ${a.path}" for the full check.`,
+          a.level === 'danger' ? 'warn' : 'info',
+          a.level === 'danger' ? '🔴' : '🟡',
+        )
+      }
+    } catch {}
+  }, [pushToast])
 
   // ── Games ─────────────────────────────────────────────────────────────────────
   const [gamesOpen, setGamesOpen] = useState(false)
@@ -311,6 +350,7 @@ export default function App() {
     loadStats()
     loadProjects()
     loadHwLive()
+    loadChatModes()
     initVoice()
     // ChatGPT-style fresh start: only auto-restore 'default' if it's actually
     // empty. If it has prior messages, spin up a new blank chat instead — the
@@ -331,6 +371,7 @@ export default function App() {
       setInterval(loadHealth, 10000),
       setInterval(loadGov, 15000),
       setInterval(loadScheduler, 30000),
+      setInterval(pollGuardianAlerts, 20000),
     ]
     return () => intervals.forEach(clearInterval)
   }, []) // eslint-disable-line
@@ -923,6 +964,8 @@ export default function App() {
         onRefresh={refreshSystem}
         onAutoSpeak={() => setAutoSpeak(p => !p)}
         autoSpeak={autoSpeak}
+        chatModes={chatModes}
+        onToggleChatMode={toggleChatMode}
       />
 
       <div className="app-body">

@@ -179,6 +179,7 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   }).then(r => r.json()),
+  guardianAlerts: () => fetch(`${BASE}/guardian/alerts`).then(r => r.json()),
   guardianGetSafe: (query = '') => fetch(`${BASE}/guardian/getsafe`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query }),
