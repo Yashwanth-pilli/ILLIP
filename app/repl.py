@@ -53,19 +53,20 @@ def _p(text: str = "", end: str = "\n") -> None:
     sys.stdout.flush()
 
 
-# Pure-ASCII figlet logo — renders on any console (no box-drawing chars).
+# Pure-ASCII cat + figlet logo — renders on any console (no box-drawing chars).
 _LOGO = r"""
-  _____ _      _      _____ _____
- |_   _| |    | |    |_   _|  __ \
-   | | | |    | |      | | | |__) |
-   | | | |    | |      | | |  ___/
-  _| |_| |____| |____ _| |_| |
- |_____|______|______|_____|_|
+      /\_/\      _____ _      _      _____ _____
+     ( o.o )    |_   _| |    | |    |_   _|  __ \
+      > ^ <       | | | |    | |      | | | |__) |
+     /     \      | | | |    | |      | | |  ___/
+    (       )    _| |_| |____| |____ _| |_| |
+     \__ __/    |_____|______|______|_____|_|
+        v
 """
 
 
 def _banner(launch_dir) -> None:
-    """Big clear ILLIP logo, then the working area below."""
+    """Big clear ILLIP cat + logo, then the working area below."""
     import os
     os.system("")  # enable ANSI colors on Windows 10+ (no-op elsewhere)
     C, DIM, R = "\033[36m", "\033[90m", "\033[0m"  # cyan, grey, reset
