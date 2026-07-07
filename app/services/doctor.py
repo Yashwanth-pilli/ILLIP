@@ -143,8 +143,22 @@ async def run_diagnostics() -> dict:
             checks.append(_check("Thermal/pressure", _OK,
                 f"{state.pressure} (GPU {state.gpu_temp_c:.0f}°C, RAM {state.ram_percent:.0f}%)"))
         if hw.ram_available_gb and hw.ram_available_gb < 2:
+            # Name the culprits — "close apps" is useless without knowing which.
+            hogs = ""
+            try:
+                import psutil
+                procs = {}
+                for p in psutil.process_iter(["name", "memory_info"]):
+                    n = (p.info["name"] or "?").removesuffix(".exe")
+                    if n.lower() in ("ollama", "llama-server", "python", "memory compression"):
+                        continue  # ILLIP's own stack isn't the thing to close
+                    procs[n] = procs.get(n, 0) + p.info["memory_info"].rss
+                top = sorted(procs.items(), key=lambda x: -x[1])[:3]
+                hogs = " Biggest apps: " + ", ".join(f"{n} ({b / 1024**3:.1f}GB)" for n, b in top)
+            except Exception:
+                pass
             checks.append(_check("Free RAM", _WARN, f"{hw.ram_available_gb:.1f}GB free",
-                                 "Close apps before running large models."))
+                                 f"Low RAM makes replies VERY slow (system swaps to disk).{hogs} — close some."))
     except Exception as e:
         checks.append(_check("Hardware", _WARN, f"detection error: {e}"))
 
