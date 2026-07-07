@@ -4,6 +4,13 @@
 
 **Your AI company, in your device.**
 
+<p align="center">
+  <a href="https://github.com/Yashwanth-pilli/ILLIP-AI/actions"><img src="https://github.com/Yashwanth-pilli/ILLIP-AI/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Yashwanth-pilli/ILLIP-AI/releases/latest"><img src="https://img.shields.io/github/v/release/Yashwanth-pilli/ILLIP-AI" alt="Release" /></a>
+  <img src="https://img.shields.io/badge/runs%20on-4GB%20laptop%20%E2%86%92%20big%20GPU-4fd1c5" alt="Hardware" />
+  <img src="https://img.shields.io/badge/privacy-100%25%20local-success" alt="Local" />
+</p>
+
 ILLIP AI is a portable, private, self-improving AI system that runs on your own hardware. It is not a chatbot. It is a full AI platform with agents, memory, knowledge graph, media generation, browser automation, workspace intelligence, and local model support — all offline-first, all under your control.
 
 ---
