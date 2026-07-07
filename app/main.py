@@ -183,6 +183,25 @@ app = FastAPI(
 from app.auth import APIKeyMiddleware
 app.add_middleware(APIKeyMiddleware)
 
+# Request ID + timing log + security headers (outermost, so auth failures are logged too)
+from app.middleware import RequestContextMiddleware
+app.add_middleware(RequestContextMiddleware)
+
+
+# Global error handler — unhandled exceptions return consistent JSON, never a stack trace
+from fastapi.responses import JSONResponse
+from starlette.requests import Request as _Request
+
+
+@app.exception_handler(Exception)
+async def _unhandled_error(request: _Request, exc: Exception):
+    rid = getattr(request.state, "request_id", "-")
+    logger.error(f"[{rid}] Unhandled error on {request.method} {request.url.path}: {exc!r}")
+    return JSONResponse(
+        {"error": "Internal server error", "request_id": rid},
+        status_code=500,
+    )
+
 # CORS — configurable via CORS_ORIGINS in .env (default: open for local use)
 app.add_middleware(
     CORSMiddleware,
@@ -199,10 +218,15 @@ app.include_router(api_router)
 from app.api.routes.openai_compat import router as _oai_router
 app.include_router(_oai_router)
 
-# Serve generated images
+# Serve ONLY generated media/artifacts — never the whole data dir. data/ also
+# holds the SQLite DB, chat history, memories and integration tokens, which
+# must not be web-readable. Videos/voice go through /api routes instead.
 data_dir = settings.project_root / "data"
 data_dir.mkdir(exist_ok=True)
-app.mount("/data", StaticFiles(directory=str(data_dir)), name="data")
+for _pub in ("images", "terminal"):
+    _pub_dir = data_dir / _pub
+    _pub_dir.mkdir(parents=True, exist_ok=True)
+    app.mount(f"/data/{_pub}", StaticFiles(directory=str(_pub_dir)), name=f"data-{_pub}")
 
 # Serve frontend — Vite build output (dist/) takes priority, falls back to root
 _frontend_root = settings.project_root / "frontend"

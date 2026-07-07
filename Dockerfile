@@ -17,12 +17,20 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Shared browsers path so the non-root user below can use Playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN playwright install chromium --with-deps 2>/dev/null || true
 
 COPY . .
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 RUN mkdir -p data/memory data/logs data/tasks data/workspaces data/snapshots
+
+# Run as non-root
+RUN useradd -m illip \
+    && chown -R illip:illip /app \
+    && { [ -d /ms-playwright ] && chown -R illip:illip /ms-playwright || true; }
+USER illip
 
 EXPOSE 8000
 

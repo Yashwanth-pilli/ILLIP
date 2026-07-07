@@ -109,3 +109,6 @@ data/idea_vault/
 # Ship the built frontend so zip-download users get the UI without Node
 !frontend/dist/
 !frontend/dist/**
+
+# Stray uvicorn logs in repo root
+/uvicorn*.log

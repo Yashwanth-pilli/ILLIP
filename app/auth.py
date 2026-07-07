@@ -19,9 +19,12 @@ Exempt paths (always open):
 """
 
 import os
+import secrets
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+
+from app.utils import logger
 
 _EXEMPT_PREFIXES = ("/docs", "/redoc", "/openapi.json", "/data/", "/v1/models")
 _EXEMPT_EXACT = {"/", "/api/health", "/api/health/"}
@@ -62,7 +65,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         else:
             provided = request.headers.get("X-API-Key", "").strip()
 
-        if provided not in keys:
+        # Constant-time comparison against every key — no timing side channel
+        if not provided or not any(secrets.compare_digest(provided, k) for k in keys):
+            client = request.client.host if request.client else "?"
+            logger.warning(f"Auth failed: {request.method} {path} from {client}")
             return JSONResponse(
                 {"detail": "Invalid or missing API key. Set Authorization: Bearer <key>"},
                 status_code=401,
