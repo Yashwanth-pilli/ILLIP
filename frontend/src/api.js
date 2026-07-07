@@ -16,6 +16,34 @@ export const api = {
     body: JSON.stringify({ model }),
   }).then(r => r.json()),
   ghostEngine: (model) => fetch(`${BASE}/system/ghost-engine/${encodeURIComponent(model)}`).then(r => r.json()),
+  modelCatalog: () => fetch(`${BASE}/system/models/catalog`).then(r => r.json()),
+  modelDelete: (name) => fetch(`${BASE}/system/models/${encodeURIComponent(name)}`, { method: 'DELETE' }).then(r => r.json()),
+  // Streams SSE pull progress: onProgress({status, total, completed, error, done})
+  modelPull: async (name, onProgress) => {
+    const r = await fetch(`${BASE}/system/models/pull`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      throw new Error(err.detail || `Pull failed (${r.status})`)
+    }
+    const reader = r.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      const parts = buf.split('\n\n')
+      buf = parts.pop()
+      for (const p of parts) {
+        const line = p.replace(/^data: /, '').trim()
+        if (!line) continue
+        try { onProgress(JSON.parse(line)) } catch { /* partial line */ }
+      }
+    }
+  },
   refresh: (project_id) => fetch(`${BASE}/system/refresh`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ project_id }),

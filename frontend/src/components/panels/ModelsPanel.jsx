@@ -2,7 +2,7 @@ import React from 'react'
 
 const STRAT_COLORS = { full_gpu: '#22c55e', hybrid: '#f59e0b', cpu_only: '#ef4444' }
 
-export default function ModelsPanel({ data, onSwitch }) {
+export default function ModelsPanel({ data, onSwitch, onDelete }) {
   if (!data) return <p className="status-label">Loading…</p>
   if (!data.ollama_running) return <p style={{color:'#ef4444'}}>Ollama offline — run: <code>ollama serve</code></p>
 
@@ -10,9 +10,19 @@ export default function ModelsPanel({ data, onSwitch }) {
     <div>
       {(data.models || []).map(m => (
         <div key={m.name} className="model-item" onClick={() => onSwitch(m.name)}>
-          <div className="model-name">
-            {m.name}{m.is_recommended ? ' ⭐' : ''}
-            {m.name === data.active ? <span style={{color:'#667eea'}}> (active)</span> : null}
+          <div className="model-name" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>
+              {m.name}{m.is_recommended ? ' ⭐' : ''}
+              {m.name === data.active ? <span style={{color:'#667eea'}}> (active)</span> : null}
+            </span>
+            {onDelete && m.name !== data.active && (
+              <button
+                className="icon-btn"
+                title={`Delete ${m.name} from disk (${m.size_gb}GB)`}
+                style={{fontSize:'12px',padding:'0 6px'}}
+                onClick={(e) => { e.stopPropagation(); onDelete(m.name) }}
+              >🗑️</button>
+            )}
           </div>
           <div className="model-meta">
             <span style={{color: STRAT_COLORS[m.strategy] || '#94a3b8'}}>{m.strategy || 'unknown'}</span>

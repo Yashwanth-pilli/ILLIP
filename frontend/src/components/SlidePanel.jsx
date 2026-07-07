@@ -2,6 +2,7 @@ import React from 'react'
 import SystemPanel from './panels/SystemPanel.jsx'
 import HardwarePanel from './panels/HardwarePanel.jsx'
 import ModelsPanel from './panels/ModelsPanel.jsx'
+import ModelStore from './panels/ModelStore.jsx'
 import GhostEnginePanel from './panels/GhostEnginePanel.jsx'
 import SkillsPanel from './panels/SkillsPanel.jsx'
 import HealthPanel from './panels/HealthPanel.jsx'
@@ -51,11 +52,14 @@ function SystemAndHealthPanel({ systemStatus, hardwareStatus, hwLive, healthData
 
 // Merged: model list (switch) + Ghost Engine (per-model GPU/VRAM plan) were
 // two separate tabs about the same models. One "Models & Ghost Engine" tab.
-function ModelsAndGhostPanel({ modelsData, onSwitchModel, pinnedModel }) {
+function ModelsAndGhostPanel({ modelsData, onSwitchModel, pinnedModel, onDeleteModel, onModelsChanged }) {
   return (
     <div>
       <PanelSection title="Installed Models" desc="Every AI model on your machine — click one to switch ILLIP's brain.">
-        <ModelsPanel data={modelsData} onSwitch={onSwitchModel} />
+        <ModelsPanel data={modelsData} onSwitch={onSwitchModel} onDelete={onDeleteModel} />
+      </PanelSection>
+      <PanelSection title="Get Models" desc="Curated picks sized for your hardware — download with one click.">
+        <ModelStore onInstalled={onModelsChanged} />
       </PanelSection>
       <PanelSection title="Ghost Engine Plan" desc="Maps each model to an optimal GPU/CPU split for your hardware.">
         <GhostEnginePanel models={modelsData} activeModel={modelsData?.active || pinnedModel} />
@@ -68,14 +72,14 @@ export default function SlidePanel({
   activePanel, onClose,
   systemStatus, hardwareStatus, hwLive, modelsData, skills,
   plugins, healthData, govPending, schedulerJobs, stats, pinnedModel,
-  onSwitchModel, onGovApprove, onGovDeny, onSchedRun, onSchedToggle,
+  onSwitchModel, onDeleteModel, onModelsChanged, onGovApprove, onGovDeny, onSchedRun, onSchedToggle,
   onAddPlugin, onDeletePlugin, onInstallSkill, onShowMarketplace, onCreateJob,
   activeProject, projects, onSwitchProject, onDeleteProject, onNewChat,
 }) {
   const panelProps = {
     chats:      { component: ChatHistoryPanel,     props: { projects, activeProject, onSwitchProject, onDeleteProject, onNewChat, onClose } },
     system:     { component: SystemAndHealthPanel, props: { systemStatus, hardwareStatus, hwLive, healthData, onSwitchModel } },
-    models:     { component: ModelsAndGhostPanel,  props: { modelsData, onSwitchModel, pinnedModel } },
+    models:     { component: ModelsAndGhostPanel,  props: { modelsData, onSwitchModel, pinnedModel, onDeleteModel, onModelsChanged } },
     skills:     { component: SkillsPanel,          props: { skills, onInstall: onInstallSkill } },
     governance: { component: GovernancePanel,      props: { pending: govPending, onApprove: onGovApprove, onDeny: onGovDeny } },
     scheduler:  { component: SchedulerPanel,       props: { jobs: schedulerJobs, onRun: onSchedRun, onToggle: onSchedToggle, onCreate: onCreateJob } },

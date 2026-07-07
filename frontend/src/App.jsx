@@ -14,6 +14,7 @@ import CreateJobModal from './components/dialogs/CreateJobModal.jsx'
 import MarketplaceModal from './components/dialogs/MarketplaceModal.jsx'
 import Toasts from './components/Toasts.jsx'
 import GamesModal from './components/dialogs/GamesModal.jsx'
+import FirstRunWizard from './components/dialogs/FirstRunWizard.jsx'
 import AgentsRunPanel from './components/AgentsRunPanel.jsx'
 import { ILLIP_GUIDE } from './guide.js'
 
@@ -115,6 +116,9 @@ export default function App() {
   const [installSkillOpen, setInstallSkillOpen] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
   const [newChatChoiceOpen, setNewChatChoiceOpen] = useState(false)
+  const [wizardDismissed, setWizardDismissed] = useState(
+    () => localStorage.getItem('illip_wizard_done') === '1'
+  )
   const [createJobOpen, setCreateJobOpen] = useState(false)
   const [marketplaceOpen, setMarketplaceOpen] = useState(false)
 
@@ -250,6 +254,18 @@ export default function App() {
       }
     } catch {}
   }, [pinnedModel, showGhostBadge])
+
+  const deleteModel = useCallback(async (name) => {
+    if (!confirm(`Delete model "${name}" from disk? You can re-download it any time.`)) return
+    try {
+      const d = await api.modelDelete(name)
+      if (d.detail) { pushToast(`⚠️ ${d.detail}`); return }
+      pushToast(`🗑️ Deleted ${name}`)
+      await loadModels()
+    } catch (e) {
+      pushToast(`Delete failed: ${e.message || e}`)
+    }
+  }, [loadModels, pushToast])
 
   const loadSkills = useCallback(async () => {
     try {
@@ -990,6 +1006,8 @@ export default function App() {
           schedulerJobs={schedulerJobs}
           stats={stats}
           onSwitchModel={switchModel}
+          onDeleteModel={deleteModel}
+          onModelsChanged={loadModels}
           onGovApprove={govApprove}
           onGovDeny={govDeny}
           onSchedRun={schedRunNow}
@@ -1112,6 +1130,15 @@ export default function App() {
         <InstallSkillDialog
           onClose={() => setInstallSkillOpen(false)}
           onInstalled={() => { setInstallSkillOpen(false); loadSkills() }}
+        />
+      )}
+      {modelsData && !modelsData.models?.length && !wizardDismissed && (
+        <FirstRunWizard
+          onDone={(installed) => {
+            localStorage.setItem('illip_wizard_done', '1')
+            setWizardDismissed(true)
+            if (installed) loadModels()
+          }}
         />
       )}
       {newChatChoiceOpen && (

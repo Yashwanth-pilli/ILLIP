@@ -274,6 +274,117 @@ async def list_models_with_plans():
     }
 
 
+@router.get("/models/catalog")
+async def models_catalog():
+    """Curated downloadable models with a per-machine fit verdict + disk space.
+    Answers "which model should I get?" BEFORE downloading gigabytes."""
+    from app.hardware.detector import get_hardware_info
+    from app.services.model_catalog import (
+        load_catalog, fit_verdict, free_disk_gb, recommend_download,
+    )
+    from app.hardware.ghost_engine import list_installed_models
+    from app.config import settings as _cfg
+
+    hw = get_hardware_info()
+    vram, ram = hw.gpu_vram_gb or 0, hw.ram_gb or 0
+    try:
+        installed = {m["name"] for m in await list_installed_models(_cfg.ollama_base_url)}
+        ollama_running = True
+    except Exception:
+        installed, ollama_running = set(), False
+
+    catalog = load_catalog()
+    entries = []
+    for e in catalog:
+        entries.append({
+            **e,
+            "fit": fit_verdict(e, vram, ram),
+            "installed": e["name"] in installed
+                or e["name"].split(":")[0] in {i.split(":")[0] for i in installed},
+        })
+    return {
+        "catalog": entries,
+        "recommended_download": recommend_download(catalog, installed, vram, ram),
+        "free_disk_gb": round(free_disk_gb(), 1),
+        "hardware_summary": f"{hw.gpu_name} · {hw.gpu_vram_gb}GB VRAM · {hw.ram_gb}GB RAM",
+        "ollama_running": ollama_running,
+    }
+
+
+@router.post("/models/pull")
+async def models_pull(body: dict):
+    """Download a model via Ollama, streaming progress as SSE.
+    Refuses when disk space is short — better than a failed 5GB pull."""
+    import aiohttp
+    from fastapi import HTTPException
+    from fastapi.responses import StreamingResponse
+    from app.services.model_catalog import load_catalog, disk_ok
+    from app.config import settings as _cfg
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "Missing model name")
+
+    size_gb = next((e["size_gb"] for e in load_catalog() if e["name"] == name), 5.0)
+    ok, free = disk_ok(size_gb)
+    if not ok:
+        raise HTTPException(
+            507,
+            f"Not enough disk space: {name} needs ~{size_gb:.1f}GB (+unpack margin), "
+            f"only {free}GB free where Ollama stores models. Delete an old model first.",
+        )
+
+    async def _stream():
+        try:
+            timeout = aiohttp.ClientTimeout(total=None, sock_read=300)
+            async with aiohttp.ClientSession(timeout=timeout) as s:
+                async with s.post(
+                    f"{_cfg.ollama_base_url}/api/pull",
+                    json={"name": name, "stream": True},
+                ) as resp:
+                    async for line in resp.content:
+                        line = line.strip()
+                        if line:
+                            yield f"data: {line.decode('utf-8', 'replace')}\n\n"
+        except Exception as e:
+            yield f'data: {{"error": "{str(e)[:200]}"}}\n\n'
+        yield 'data: {"done": true}\n\n'
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+@router.delete("/models/{name:path}")
+async def models_delete(name: str):
+    """Delete an installed model — but never the one ILLIP is running on."""
+    import aiohttp
+    from fastapi import HTTPException
+    from app.config import settings as _cfg
+
+    name = name.strip()
+    protected = {_cfg.ollama_model, _cfg.ollama_embed_model}
+    try:
+        from app.services.router_service import LARGE, SMALL
+        protected |= {LARGE, SMALL}
+    except Exception:
+        pass
+    if name in protected or name.split(":")[0] in {p.split(":")[0] for p in protected if p}:
+        raise HTTPException(400, f"'{name}' is in use by ILLIP (active/router/embeddings) — switch first, then delete.")
+
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.delete(
+                f"{_cfg.ollama_base_url}/api/delete",
+                json={"name": name},
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status == 200:
+                    return {"deleted": name}
+                detail = (await resp.text())[:200]
+                raise HTTPException(resp.status, f"Ollama refused: {detail}")
+    except aiohttp.ClientError as e:
+        raise HTTPException(502, f"Ollama unreachable: {e}")
+
+
 @router.post("/models/switch")
 async def switch_active_model(body: dict):
     """
