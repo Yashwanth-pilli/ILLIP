@@ -352,6 +352,11 @@ export default function App() {
     } catch {}
   }, [activeProject, loadProjects, loadChatHistory])
 
+  // Remember the active chat across refreshes
+  useEffect(() => {
+    localStorage.setItem('illip_active_project', activeProject)
+  }, [activeProject])
+
   useEffect(() => {
     // Initial load
     checkHealth()
@@ -368,14 +373,13 @@ export default function App() {
     loadHwLive()
     loadChatModes()
     initVoice()
-    // ChatGPT-style fresh start: only auto-restore 'default' if it's actually
-    // empty. If it has prior messages, spin up a new blank chat instead — the
-    // old one stays reachable from the Chats sidebar, never lost.
+    // Continue where you left off: restore the last active chat + its
+    // messages on refresh. New chats are explicit (+ button) — a page
+    // refresh must never look like the conversation vanished.
     ;(async () => {
-      try {
-        const d = await api.chatHistory('default')
-        if ((d.messages || []).length > 0) await startBlankChat()
-      } catch {}
+      const saved = localStorage.getItem('illip_active_project') || 'default'
+      setActiveProject(saved)
+      await loadChatHistory(saved)
     })()
 
     // Polling

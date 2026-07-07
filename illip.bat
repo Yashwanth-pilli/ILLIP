@@ -4,6 +4,7 @@ REM   illip                   -> start the web app + open it in the browser (nor
 REM   illip code              -> terminal coding agent in a fresh window (serious work)
 REM   illip code --continue   -> resume your last terminal conversation
 REM   illip build "make X"    -> run the agent crew on a folder
+REM   illip repair            -> fix a stuck/broken ILLIP (kill, heal, rollback, restart)
 REM   illip status / version  -> other subcommands
 set "ILLIPDIR=E:\Projects\ILLIP_AI"
 set "PY=%ILLIPDIR%\.venv\Scripts\python.exe"
@@ -17,6 +18,14 @@ REM so it builds where you are. PYTHONPATH lets Python find the app package.
 if /i "%~1"=="code" (
     set "PYTHONPATH=%ILLIPDIR%"
     start "ILLIP Code" cmd /k "%PY% -m app.cli %*"
+    goto :eof
+)
+
+REM `illip repair` -> standalone recovery script (works even when app code
+REM is broken — imports nothing from the app).
+if /i "%~1"=="repair" (
+    cd /d "%ILLIPDIR%"
+    "%PY%" scripts\repair.py
     goto :eof
 )
 
