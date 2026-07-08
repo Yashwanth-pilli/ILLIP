@@ -108,9 +108,14 @@ def extract_and_write_files(text: str, run_dir: Path, seen_hashes: set | None = 
             hint = _FNAME_HINT.search(pre)
             if hint:
                 fname = hint.group(1)
+        # A model may wrap or prefix the real name with placeholder decoration,
+        # e.g. "<filename>primes.py" or "<primes.py>". Pull the actual name.ext
+        # token out of whatever surrounds it rather than trying to strip
+        # specific decoration shapes.
+        name_tokens = re.findall(r"[\w.-]+\.[A-Za-z0-9]{1,8}", fname)
+        fname = name_tokens[-1] if name_tokens else ""
         # Reject junk filenames (e.g. a function signature grabbed as a name):
         # must look like name.ext, else fall back to the language default.
-        fname = fname.strip()
         if fname and not re.match(r"^[\w.-]+\.[A-Za-z0-9]{1,8}$", fname):
             fname = ""
         if not fname:
@@ -281,12 +286,13 @@ async def run_task_stream(task: str, dest: str = "", out_dir: Path | None = None
         if agent_type in ("code", "builder", "design", "tester"):
             step_task += (
                 "\n\nWrite COMPLETE, runnable code. Put each file in its own fenced block "
-                "with the filename in the info string, e.g. ```python:<filename> or ```html:<filename>. "
-                "If the task names a specific filename (e.g. \"save it to fib.py\"), the info string "
-                "MUST use that exact name — never substitute a generic placeholder like app.py. "
-                "No placeholders or TODOs. CREATE FILES ONLY with these fenced blocks — they are "
-                "saved to disk automatically. Do NOT use shell to write files (no `cat > f << EOF`, "
-                "no `echo > f`): the shell here is Windows cmd and heredocs fail."
+                "with the real filename in the info string (format lang:name.ext), e.g. "
+                "```python:main.py or ```html:index.html. If the task names a specific filename "
+                "(e.g. \"save it to fib.py\"), the info string MUST use that exact name instead of "
+                "the example — write the literal name, not a placeholder word or angle brackets. "
+                "No placeholders or TODOs in the code either. CREATE FILES ONLY with these fenced "
+                "blocks — they are saved to disk automatically. Do NOT use shell to write files "
+                "(no `cat > f << EOF`, no `echo > f`): the shell here is Windows cmd and heredocs fail."
             )
         # Tester/builder can actually run and verify via the shell.
         if agent_type in ("tester", "builder"):
