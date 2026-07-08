@@ -281,7 +281,9 @@ async def run_task_stream(task: str, dest: str = "", out_dir: Path | None = None
         if agent_type in ("code", "builder", "design", "tester"):
             step_task += (
                 "\n\nWrite COMPLETE, runnable code. Put each file in its own fenced block "
-                "with the filename in the info string, e.g. ```python:app.py or ```html:index.html. "
+                "with the filename in the info string, e.g. ```python:<filename> or ```html:<filename>. "
+                "If the task names a specific filename (e.g. \"save it to fib.py\"), the info string "
+                "MUST use that exact name — never substitute a generic placeholder like app.py. "
                 "No placeholders or TODOs. CREATE FILES ONLY with these fenced blocks — they are "
                 "saved to disk automatically. Do NOT use shell to write files (no `cat > f << EOF`, "
                 "no `echo > f`): the shell here is Windows cmd and heredocs fail."
