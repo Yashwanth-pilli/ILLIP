@@ -156,7 +156,7 @@ async def get_provider() -> BaseProvider:
     global _provider, _provider_name
 
     mode = (os.environ.get("MODEL_PROVIDER") or settings.model_provider or "auto").lower()
-    if mode == "auto" and _provider_name in ("anthropic", "openrouter", "groq", "openai_compat"):
+    if mode == "auto" and _provider_name in ("anthropic", "openrouter", "groq", "openai_compat", "mock"):
         ollama = OllamaProvider()
         if await ollama.health_check():
             logger.info("Provider: Ollama back online — switching from cloud")

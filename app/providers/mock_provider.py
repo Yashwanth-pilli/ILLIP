@@ -49,3 +49,27 @@ class MockProvider(BaseProvider):
         logger.debug(f"Received {len(messages)} messages for processing")
         
         return response
+
+    async def generate_with_tools(
+        self,
+        messages: List[Message],
+        tools: list[dict],
+        temperature: float = 0.7,
+        model: Optional[str] = None,
+        num_ctx: int = 8192,
+    ) -> tuple[str, list[dict]]:
+        """Mock never calls tools — answers directly, empty tool_calls."""
+        return await self.generate_response(messages, temperature), []
+
+    async def stream_response(
+        self,
+        messages: List[Message],
+        temperature: float = 0.7,
+        model: Optional[str] = None,
+        num_ctx: int = 4096,
+    ):
+        """Yield the mock response word-by-word so callers expecting a streaming
+        generator (chat.py) work the same as with a real provider."""
+        response = await self.generate_response(messages, temperature)
+        for word in response.split(" "):
+            yield word + " "

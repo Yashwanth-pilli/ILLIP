@@ -36,6 +36,22 @@ goto :eof
 
 :serve
 cd /d "%ILLIPDIR%"
+
+REM Start Ollama first so the server picks it up instead of falling back to Mock.
+netstat -ano | findstr ":11434 " | findstr LISTENING >nul 2>&1
+if errorlevel 1 (
+    where ollama >nul 2>&1
+    if errorlevel 1 (
+        echo Ollama not found on PATH — skipping, ILLIP will fall back to cloud/mock.
+    ) else (
+        echo Starting Ollama...
+        start "Ollama" /min ollama serve
+        timeout /t 5 /nobreak >nul
+    )
+) else (
+    echo Ollama already running.
+)
+
 netstat -ano | findstr ":8000 " | findstr LISTENING >nul 2>&1
 if errorlevel 1 (
     echo Starting ILLIP...
