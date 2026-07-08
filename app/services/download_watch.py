@@ -58,7 +58,8 @@ def _scan_new_files() -> None:
                 continue
             if p.suffix.lower() in _PARTIAL_EXTS:
                 continue  # still downloading — check again next sweep
-            if now - p.stat().st_mtime < _SETTLE_SECONDS:
+            age = now - p.stat().st_mtime
+            if 0 <= age < _SETTLE_SECONDS:
                 continue  # just touched, let it settle
             _seen.add(key)
             if not _primed:
