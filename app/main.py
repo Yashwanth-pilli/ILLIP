@@ -98,6 +98,16 @@ async def lifespan(app: FastAPI):
             if not plan.feasible:
                 logger.info(f"Skip pre-warming {LARGE}: not feasible on this hardware.")
                 return
+            if plan.strategy not in ("full_gpu", "kv_offload"):
+                # Hybrid/CPU placement spills into system RAM. Keeping the heavy
+                # model resident next to the everyday model starves RAM on 16GB
+                # machines and slows every chat for the keep_alive hour. Load it
+                # on demand instead — the first deep-think task pays the cost.
+                logger.info(
+                    f"Skip pre-warming {LARGE}: would run {plan.strategy} and "
+                    f"crowd system RAM — will load on demand."
+                )
+                return
             logger.info(f"Pre-warming heavy model {LARGE} in background (first big task will be instant)…")
             await pre_warm(LARGE, settings.ollama_base_url, num_ctx=plan.ollama_options.get("num_ctx", 4096))
             logger.info(f"Heavy model {LARGE} warm and ready.")

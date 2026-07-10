@@ -30,3 +30,22 @@ def test_doctor_includes_heal_status():
     r = client.get("/api/system/doctor")
     assert r.status_code == 200
     assert "self-healing is active" in r.json()["report_md"].lower()
+
+
+def test_cpu_only_loaded_models_detects_gpu_loss():
+    """Models with zero VRAM bytes are flagged; GPU-resident ones are not."""
+    from app.services.self_heal import _cpu_only_loaded_models
+    ps = {"models": [
+        {"name": "ornith:9b", "size": 9_400_000_000, "size_vram": 0},
+        {"name": "gpt-oss:20b", "size": 14_000_000_000, "size_vram": 0},
+    ]}
+    assert _cpu_only_loaded_models(ps) == ["ornith:9b", "gpt-oss:20b"]
+
+    ps_gpu = {"models": [
+        {"name": "ornith:9b", "size": 5_300_000_000, "size_vram": 5_300_000_000},
+    ]}
+    assert _cpu_only_loaded_models(ps_gpu) == []
+
+    # Empty / absent payloads never crash
+    assert _cpu_only_loaded_models({}) == []
+    assert _cpu_only_loaded_models({"models": []}) == []

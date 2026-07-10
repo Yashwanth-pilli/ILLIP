@@ -10,10 +10,12 @@ Common failures it repairs automatically:
   1. Ollama not running        -> start `ollama serve`
   2. Active model not installed -> switch to best model the hardware can run
   3. Model cold / not loaded    -> re-warm it so the next chat is instant
+  4. GPU lost (models on CPU while the dGPU sits idle) -> restart Ollama
 """
 
 import time
 import asyncio
+import platform
 import shutil
 import subprocess
 
@@ -24,10 +26,12 @@ from app.utils import logger
 
 _POLL_INTERVAL = 60          # seconds between background heal passes
 _OLLAMA_START_COOLDOWN = 120  # don't spam `ollama serve`
+_GPU_RESTART_COOLDOWN = 600   # GPU-lost restart at most once per 10 min
 
 # Ring buffer of recent actions for the UI / doctor report
 _actions: list[dict] = []
 _last_ollama_start = 0.0
+_last_gpu_restart = 0.0
 _heal_task: asyncio.Task | None = None
 
 
@@ -78,6 +82,63 @@ def _try_start_ollama() -> bool:
     except Exception as e:
         _record("ollama_start_failed", str(e))
         return False
+
+
+def _cpu_only_loaded_models(ps_data: dict) -> list[str]:
+    """Names of loaded models running fully on CPU (zero bytes in VRAM).
+    Pure function over Ollama /api/ps payload so it's unit-testable."""
+    return [
+        m.get("name", "")
+        for m in ps_data.get("models", [])
+        if m.get("size", 0) > 0 and m.get("size_vram", 0) == 0
+    ]
+
+
+async def _loaded_models_cpu_only() -> list[str]:
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(
+                f"{settings.ollama_base_url}/api/ps",
+                timeout=aiohttp.ClientTimeout(total=4),
+            ) as r:
+                if r.status != 200:
+                    return []
+                data = await r.json()
+        return _cpu_only_loaded_models(data)
+    except Exception:
+        return []
+
+
+def _gpu_free_vram_gb() -> float:
+    """Free VRAM on the dedicated NVIDIA GPU, 0.0 if none/undetectable."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip().splitlines()[0]) / 1024
+    except Exception:
+        pass
+    return 0.0
+
+
+def _restart_ollama() -> bool:
+    """Kill and relaunch `ollama serve`. Used when Ollama lost GPU access —
+    it stays CPU-only until restarted (e.g. it was spawned from an
+    environment that blocked the GPU)."""
+    global _last_ollama_start
+    try:
+        if platform.system() == "Windows":
+            subprocess.run(["taskkill", "/IM", "ollama.exe", "/F", "/T"],
+                           capture_output=True, timeout=10)
+        else:
+            subprocess.run(["pkill", "-f", "ollama"], capture_output=True, timeout=10)
+    except Exception as e:
+        _record("ollama_restart_failed", f"kill failed: {e!r}")
+        return False
+    _last_ollama_start = 0.0  # bypass the start cooldown — this restart is deliberate
+    return _try_start_ollama()
 
 
 async def heal(reason: str = "manual") -> list[dict]:
@@ -131,6 +192,28 @@ async def heal(reason: str = "manual") -> list[dict]:
                             f"'{active}' unavailable/unfit -> '{rec}'")
             except Exception as e:
                 _record("model_switch_failed", str(e))
+
+    # 3. GPU lost: models grinding on CPU while the dGPU sits idle with free
+    # VRAM. Root cause: this Ollama instance was started without GPU access
+    # (blocked/sandboxed environment) and will never use the GPU until it
+    # restarts. This is THE recurring "why is it suddenly 10x slower" bug.
+    # Never under pytest: the heal loop runs for real during tests and this
+    # branch kills the developer's actual Ollama (same guard convention as
+    # download_watch).
+    import os
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        return _actions[before:]
+    global _last_gpu_restart
+    cpu_models = await _loaded_models_cpu_only()
+    if cpu_models and _gpu_free_vram_gb() >= 2.0:
+        now = time.monotonic()
+        if now - _last_gpu_restart >= _GPU_RESTART_COOLDOWN:
+            _last_gpu_restart = now
+            if _restart_ollama():
+                _record("ollama_gpu_restart",
+                        f"models on CPU with idle GPU: {', '.join(cpu_models)} "
+                        f"— restarted Ollama to restore GPU")
+                await asyncio.sleep(6)
 
     return _actions[before:]
 
