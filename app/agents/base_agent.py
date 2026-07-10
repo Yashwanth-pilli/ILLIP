@@ -10,6 +10,16 @@ from app.utils import logger, get_current_timestamp
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
+# Write-only crew roles (code/design) only ever produce fenced code blocks —
+# the orchestrator saves those to disk AFTER the agent's full response
+# returns. If these roles could call read_file/run_shell mid-response, a
+# self-check on a file they just described always sees "not found" (it isn't
+# on disk yet), which can send the model into bogus shell workarounds
+# instead of just answering. Verification is tester/builder's job, which do
+# get these tools.
+_WRITE_ONLY_ROLES = {"code", "design"}
+_INSPECTION_TOOLS = {"read_file", "run_shell", "read_any_file", "find_files", "run_python"}
+
 
 def _load_prompt(filename: str) -> str:
     try:
@@ -50,6 +60,9 @@ class BaseAgent(ABC):
         provider = await get_provider()
         registry = get_registry()
         tool_specs = registry.to_tool_specs()
+        if self.agent_type in _WRITE_ONLY_ROLES:
+            tool_specs = [t for t in tool_specs
+                          if t.get("function", {}).get("name") not in _INSPECTION_TOOLS]
 
         # Tool-call loop — agent can invoke skills up to 3 rounds
         if tool_specs and hasattr(provider, "generate_with_tools"):
