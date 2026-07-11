@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { marked } from 'marked'
 import { api, formatUptime, formatSecs, escapeHtml } from './api.js'
 import Header from './components/Header.jsx'
+import RamHelper from './components/RamHelper.jsx'
 import NavRail from './components/NavRail.jsx'
 import SlidePanel from './components/SlidePanel.jsx'
 import ChatMain from './components/ChatMain.jsx'
@@ -1037,6 +1038,8 @@ export default function App() {
         chatModes={chatModes}
         onToggleChatMode={toggleChatMode}
       />
+
+      <RamHelper hwLive={hwLive} />
 
       <div className="app-body">
         <NavRail

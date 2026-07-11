@@ -231,6 +231,11 @@ export const api = {
   skillsDirectory: (category = '', query = '') =>
     fetch(`${BASE}/skills/directory?category=${encodeURIComponent(category)}&query=${encodeURIComponent(query)}`)
       .then(r => r.json()),
+  ramHogs: (limit = 6) => fetch(`${BASE}/system/hogs?limit=${limit}`).then(r => r.json()),
+  closeApp: (name = '') => fetch(`${BASE}/system/close-app`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.detail || 'failed'); return d }),
 
   // Reply-style modes (caveman / ponytail)
   getChatModes: () => fetch(`${BASE}/chat/modes`).then(r => r.json()),

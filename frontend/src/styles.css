@@ -1464,3 +1464,27 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .message { animation: msgIn .22s ease both; }
 /* Status dot: calmer, no harsh neon */
 .status-dot { box-shadow: 0 0 6px rgba(78,201,138,.6) !important; }
+
+/* ── RAM helper banner (shows when memory is full) ────────────────── */
+.ram-helper {
+  margin: 0; padding: 8px 16px;
+  background: linear-gradient(90deg, rgba(234,179,8,.10), rgba(234,179,8,.04));
+  border-bottom: 1px solid rgba(234,179,8,.28);
+  font-size: 13px; color: #f4d78a;
+}
+.ram-helper-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ram-btn {
+  padding: 5px 12px; border-radius: var(--r-sm); cursor: pointer; font-size: 12px; font-weight: 600;
+  background: rgba(234,179,8,.16); color: #f4d78a; border: 1px solid rgba(234,179,8,.4);
+}
+.ram-btn:hover { background: rgba(234,179,8,.24); }
+.ram-btn.ghost { background: transparent; }
+.ram-btn.danger { background: rgba(239,68,68,.15); color: #ff9fb0; border-color: rgba(239,68,68,.4); }
+.ram-btn.danger:hover { background: rgba(239,68,68,.25); }
+.ram-btn:disabled { opacity: .5; cursor: default; }
+.ram-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; max-width: 560px; }
+.ram-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; background: rgba(0,0,0,.18); border-radius: var(--r-sm); }
+.ram-name { flex: 1; color: #e8eaed; font-size: 12.5px; }
+.ram-gb { color: var(--text2); font-size: 12px; min-width: 60px; text-align: right; }
+.ram-msg { color: #9fe9e0; font-size: 12px; margin-top: 2px; }
+.ram-muted { color: var(--text2); font-size: 11px; }

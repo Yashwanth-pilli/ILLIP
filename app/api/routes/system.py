@@ -3,6 +3,7 @@ System endpoints
 """
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from app.core import SystemStatus
 from app.services import (
     get_model_service,
@@ -464,6 +465,75 @@ async def system_doctor_heal():
         "recent_actions": recent_actions()[-10:],
         "message": (f"Fixed {len(fixed)} issue(s)." if fixed else "No problems found — system healthy."),
     }
+
+
+# Processes ILLIP must NEVER offer to kill: OS-critical, its own stack, the shell.
+_PROTECTED_PROCS = {
+    "system", "system idle process", "registry", "memory compression", "csrss.exe",
+    "wininit.exe", "services.exe", "lsass.exe", "winlogon.exe", "smss.exe",
+    "svchost.exe", "explorer.exe", "dwm.exe", "fontdrvhost.exe", "sihost.exe",
+    "ctfmon.exe", "taskhostw.exe", "runtimebroker.exe", "conhost.exe",
+    "python.exe", "pythonw.exe", "ollama.exe", "ollama app.exe",
+    "windowsterminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe",
+    "searchhost.exe", "startmenuexperiencehost.exe", "shellexperiencehost.exe",
+    "memcompression", "msmpeng.exe", "securityhealthservice.exe",
+    "securityhealthsystray.exe", "searchindexer.exe", "audiodg.exe", "wudfhost.exe",
+}
+
+
+@router.get("/hogs")
+async def ram_hogs(limit: int = 6):
+    """Top user apps eating RAM — the ones safe to offer closing when memory is
+    full. OS/ILLIP/shell processes are filtered out so we never suggest killing them."""
+    import psutil
+    apps: dict[str, dict] = {}
+    for p in psutil.process_iter(["name", "memory_info", "pid"]):
+        try:
+            n = (p.info.get("name") or "").lower()
+            if not n or n in _PROTECTED_PROCS:
+                continue
+            mi = p.info.get("memory_info")
+            if not mi:
+                continue
+            a = apps.setdefault(n, {"name": p.info["name"], "gb": 0.0, "procs": 0})
+            a["gb"] += mi.rss / 1024**3
+            a["procs"] += 1
+        except Exception:
+            continue
+    top = sorted(apps.values(), key=lambda x: -x["gb"])[:max(1, min(limit, 15))]
+    for t in top:
+        t["gb"] = round(t["gb"], 2)
+    return {"hogs": top}
+
+
+class CloseAppBody(BaseModel):
+    name: str
+
+
+@router.post("/close-app")
+async def close_app(body: CloseAppBody):
+    """Close every process of a named app (e.g. all chrome.exe). Guarded: refuses
+    OS-critical, ILLIP's own stack, and the shell. User-triggered = permission given."""
+    import psutil
+    name = (body.name or "").strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="App name required.")
+    if name in _PROTECTED_PROCS:
+        raise HTTPException(status_code=400, detail=f"Refused — '{name}' is protected (system/ILLIP).")
+    killed, freed = 0, 0.0
+    for p in psutil.process_iter(["name", "memory_info"]):
+        try:
+            if (p.info.get("name") or "").lower() == name:
+                mi = p.info.get("memory_info")
+                if mi:
+                    freed += mi.rss / 1024**3
+                p.terminate()
+                killed += 1
+        except Exception:
+            continue
+    if not killed:
+        raise HTTPException(status_code=404, detail=f"No running process named '{name}'.")
+    return {"closed": name, "processes": killed, "freed_gb": round(freed, 2)}
 
 
 @router.get("/reflexion/stats")
