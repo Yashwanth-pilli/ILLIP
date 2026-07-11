@@ -202,22 +202,11 @@ export default function ChatMain({
         {/* Mode buttons */}
         <div className="input-controls">
           <span className="model-badge">{activeModel || 'Auto'}</span>
-          <button className={`mode-btn ${forceLarge ? 'active' : ''}`} onClick={onToggleForceLarge}>Force Large</button>
-          <button className={`mode-btn ${forceSearch ? 'active' : ''}`} onClick={onToggleForceSearch}>Search</button>
-          <button className="mode-btn refresh-btn" onClick={() => onChat('!refresh')} title="Clear context">↺</button>
+          <button className="mode-btn refresh-btn" onClick={() => onChat('!refresh')} title="Clear context">↺ New chat</button>
         </div>
 
         {/* Action buttons */}
         <div className="action-btns">
-          <button
-            className="action-btn research"
-            onClick={() => onStartResearch(inputValue.trim())}
-            disabled={isResearching}
-          >Research</button>
-          <button
-            className="action-btn browser"
-            onClick={onOpenBrowser}
-          >Browser</button>
           <button
             className="action-btn imggen"
             onClick={onOpenImage}
@@ -356,7 +345,7 @@ export default function ChatMain({
             </button>
           ) : (
             <button type="submit" className="send-button">
-              Send ▶
+              Send
             </button>
           )}
         </form>

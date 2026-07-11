@@ -1588,3 +1588,103 @@ body::after {
 
 /* drop the build badge — clutter. Keep UI clean. */
 body::after { content: none !important; }
+
+/* ============================================================
+   v2 CHAT SURFACE — cohesive violet, glass composer, clean pills.
+   Appended last, wins the cascade. This is the "super cool neat" pass.
+   ============================================================ */
+
+/* User bubble → violet, was teal-green */
+.message.user .message-content {
+  background: linear-gradient(135deg, rgba(139,123,255,.22), rgba(139,123,255,.10)) !important;
+  border: 1px solid rgba(139,123,255,.34) !important;
+  box-shadow: 0 6px 22px rgba(139,123,255,.14) !important;
+  border-radius: 18px 18px 6px 18px !important;
+}
+
+/* Assistant reply → a real neat card with a violet accent edge */
+.message.assistant .message-content {
+  background: rgba(255,255,255,.025) !important;
+  border: 1px solid var(--border) !important;
+  border-left: 3px solid var(--accent) !important;
+  border-radius: 6px 18px 18px 18px !important;
+  padding: 14px 18px !important;
+  padding-left: 18px !important;
+  max-width: 760px !important;
+  box-shadow: 0 6px 22px rgba(0,0,0,.18) !important;
+}
+.message.thinking .message-content,
+.message.assistant .message-content:has(.routing-badge:only-child) {
+  background: transparent !important; border: none !important; box-shadow: none !important;
+  border-left: none !important; padding-left: 0 !important;
+}
+/* markdown accents follow the violet identity */
+.message-content h1, .message-content h2, .message-content h3 { color: var(--accent-2) !important; }
+.message-content a { color: var(--accent-2) !important; }
+.message-content code { color: var(--accent-2) !important; }
+
+/* Composer → elevated glass bar */
+.input-area {
+  background: linear-gradient(0deg, rgba(15,17,32,.92), rgba(15,17,32,.4)) !important;
+  backdrop-filter: blur(12px) saturate(1.1);
+  border-top: 1px solid var(--border2) !important;
+}
+.chat-form {
+  background: rgba(20,22,38,.7);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  padding: 6px 6px 6px 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 8px 24px rgba(0,0,0,.25);
+  transition: border-color .15s, box-shadow .15s;
+}
+.chat-form:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 8px 24px rgba(0,0,0,.25);
+}
+.message-input { background: transparent !important; border: none !important; box-shadow: none !important; }
+
+/* Send → violet gradient pill */
+.send-button {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+  color: #12101f !important; font-weight: 700 !important;
+  border: none !important; border-radius: 12px !important;
+  box-shadow: 0 6px 18px rgba(139,123,255,.35) !important;
+}
+.send-button:hover { filter: brightness(1.08); }
+.send-button.stop-button {
+  background: linear-gradient(135deg, #ff6b7d, #ff4d6a) !important; color: #fff !important;
+}
+
+/* Pills → neutral, violet on hover/active (was teal everywhere) */
+.model-badge {
+  background: var(--surface) !important; color: var(--accent-2) !important;
+  border: 1px solid var(--border2) !important; text-shadow: none !important;
+}
+.mode-btn, .action-btn { border-radius: 20px !important; }
+.mode-btn:hover, .action-btn:hover:not(:disabled) {
+  border-color: var(--accent) !important; color: var(--accent-2) !important;
+  box-shadow: 0 4px 12px rgba(139,123,255,.18) !important;
+}
+.mode-btn.active {
+  background: var(--accent-soft) !important; color: var(--accent-2) !important;
+  border-color: var(--accent) !important; box-shadow: none !important;
+}
+.action-btn.imggen {
+  background: var(--accent-soft) !important; color: var(--accent-2) !important;
+  border-color: rgba(139,123,255,.35) !important;
+}
+.refresh-btn { color: var(--accent-2) !important; border-color: var(--border2) !important; }
+.refresh-btn:hover { border-color: var(--accent) !important; box-shadow: 0 0 8px rgba(139,123,255,.2) !important; }
+
+/* Message action buttons (Edit/Delete) → subtle text, no clutter */
+.msg-action-btn {
+  background: transparent; border: 1px solid transparent; color: var(--text2);
+  font-size: 11px; padding: 2px 8px; border-radius: 8px; cursor: pointer;
+  opacity: 0; transition: opacity .15s, background .15s;
+}
+.message-content:hover .msg-action-btn { opacity: .7; }
+.msg-action-btn:hover { opacity: 1; background: rgba(255,255,255,.06); color: var(--text); }
+
+/* Header mode buttons → match violet, drop the teal glow */
+.app-header .mode-btn:hover { border-color: var(--accent) !important; color: var(--accent-2) !important; box-shadow: none !important; }
+.app-header .mode-btn.active { background: var(--accent-soft) !important; color: var(--accent-2) !important; border-color: var(--accent) !important; }

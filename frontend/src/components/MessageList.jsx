@@ -69,11 +69,11 @@ function Message({ msg, onFeedback, onSpeak, onRegenerate, onDeleteMessage, onEd
         <span className="msg-actions">
           {msg.role === 'user' && onEditMessage && (
             <button className="msg-action-btn" title="Edit and resend"
-              onClick={() => { setEditText(msg.content); setEditing(true) }}>✏️</button>
+              onClick={() => { setEditText(msg.content); setEditing(true) }}>Edit</button>
           )}
-          {onDeleteMessage && (
+          {msg.role === 'user' && onDeleteMessage && (
             <button className="msg-action-btn" title="Delete message"
-              onClick={() => onDeleteMessage(msg)}>🗑️</button>
+              onClick={() => onDeleteMessage(msg)}>Delete</button>
           )}
         </span>
       </div>

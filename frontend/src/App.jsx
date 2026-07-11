@@ -463,6 +463,37 @@ export default function App() {
       return
     }
 
+    // Slash command: /browser — open the web browser panel. No LLM call.
+    if (typeof message === 'string' && ['/browser', '/web'].includes(message.trim().toLowerCase())) {
+      setBrowserOpen(true)
+      api.browserStatus().then(s => setHasSavedSession(!!s.has_saved_session)).catch(() => {})
+      return
+    }
+
+    // Slash command: /research <query> — deep multi-source cited research.
+    if (typeof message === 'string' && message.trim().toLowerCase().startsWith('/research')) {
+      const q = message.trim().slice('/research'.length).trim()
+      if (q) { addMessage('user', `/research ${q}`); startResearch(q) }
+      else addMessage('assistant', 'Give me a topic: `/research best local LLMs for a laptop with 8GB VRAM`')
+      return
+    }
+
+    // Slash commands: /search on|off, /large on|off — toggle reply behaviour.
+    if (typeof message === 'string' && message.trim().toLowerCase().startsWith('/search')) {
+      const arg = message.trim().slice('/search'.length).trim().toLowerCase()
+      const on = arg !== 'off'
+      setForceSearch(on)
+      addMessage('assistant', on ? 'Web search **ON** — replies will search the web first. `/search off` to stop.' : 'Web search **OFF**.')
+      return
+    }
+    if (typeof message === 'string' && (message.trim().toLowerCase().startsWith('/large') || message.trim().toLowerCase().startsWith('/forcelarge'))) {
+      const arg = message.trim().replace(/^\/(forcelarge|large)/i, '').trim().toLowerCase()
+      const on = arg !== 'off'
+      setForceLarge(on)
+      addMessage('assistant', on ? 'Force-large **ON** — uses the big model for every reply. `/large off` to stop.' : 'Force-large **OFF** — back to auto-routing.')
+      return
+    }
+
 
     // Slash command: /loop <goal> — agent company loops until QA passes.
     if (typeof message === 'string' && message.trim().toLowerCase().startsWith('/loop')) {
