@@ -59,6 +59,35 @@ async def set_chat_mode(req: ModeRequest):
     return {"modes": state}
 
 
+class SharpenRequest(BaseModel):
+    message: str
+    rounds: int = 1
+    ground: bool = True
+    project_id: str = "default"
+
+
+@router.post("/sharpen")
+async def sharpen_message(req: SharpenRequest):
+    """Answer with the active brain, then lift the answer via ILLIP's
+    draft->critique->refine loop. Brain-agnostic: works with whatever provider
+    is infused. Returns both the raw draft and the sharpened answer so the
+    improvement is visible (and benchmarkable)."""
+    if not req.message or not req.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    from app.services.sharpener import sharpen
+    try:
+        result = await sharpen(
+            req.message,
+            rounds=max(1, min(req.rounds, 3)),
+            ground=req.ground,
+            project_id=req.project_id,
+        )
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"Sharpen error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def _reflexion_observe(question: str, response: str, base_url: str) -> None:
     """Fire-and-forget: score response quality, save high-quality patterns."""
     try:

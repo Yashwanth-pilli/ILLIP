@@ -216,6 +216,21 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   }).then(r => r.json()),
+  sharpen: (message = '', rounds = 1) => fetch(`${BASE}/chat/sharpen`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, rounds }),
+  }).then(r => r.json()),
+  ask: (query = '', depth = 'quick') => fetch(`${BASE}/research/ask`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, depth }),
+  }).then(r => r.json()),
+  readUrl: (url = '') => fetch(`${BASE}/research/read`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  }).then(r => r.json()),
+  skillsDirectory: (category = '', query = '') =>
+    fetch(`${BASE}/skills/directory?category=${encodeURIComponent(category)}&query=${encodeURIComponent(query)}`)
+      .then(r => r.json()),
 
   // Reply-style modes (caveman / ponytail)
   getChatModes: () => fetch(`${BASE}/chat/modes`).then(r => r.json()),

@@ -59,6 +59,10 @@ Type `/` in the chat box — a menu pops up (↑↓ to pick, Enter to accept, Es
 | `/caveman [off]` | Terse replies — faster on local hardware |
 | `/ponytail [off]` | Simplest-solution mode — flags over-engineering |
 | `/gstack [path]` | Read-only git report: branch, status, staged changes + a suggested commit message |
+| `/ask <question>` | Perplexity-style live answer: keyless web search → reads the top pages → cited synthesis with source links. Inline in chat (the 🔬 Research panel does the same with streaming steps). No API key. |
+| `/read <url>` | Keyless smart-read of any link: YouTube→transcript, GitHub→readme/file, Reddit→thread (often blocked), else clean article text. No API key. |
+| `/skills [category]` | Browse the curated agent-skills directory (from awesome-agent-skills). Filter by category e.g. `/skills security`. Discovery only — links out. |
+| `/sharpen <question>` | Answers, then the same brain self-critiques and refines the answer (draft→critique→refine). Brain-agnostic; shows whether the loop improved it. Benchmark: `python scripts/sharpen_bench.py` |
 
 ### Reminders
 | Command | What it does |

@@ -67,6 +67,42 @@ async def stream_research(
     )
 
 
+@router.post("/ask")
+async def ask(req: ResearchRequest):
+    """Non-streaming Perplexity-style answer for inline chat use (`/ask`).
+    Runs the full research pipeline (keyless search -> read pages -> cited
+    synthesis) and returns the final answer + sources in one shot."""
+    agent = get_research_agent()
+    answer, sources, subs = "", [], []
+    try:
+        async for step in agent.research(query=req.query, depth=req.depth or "quick"):
+            if step.type == "done":
+                answer = step.data.get("answer", "")
+                sources = step.data.get("sources", [])
+                subs = step.data.get("sub_questions", [])
+            elif step.type == "error":
+                return {"answer": "", "sources": [], "error": step.message}
+    except Exception as e:
+        logger.error(f"/ask failed: {e}")
+        return {"answer": "", "sources": [], "error": str(e)}
+    return {"answer": answer, "sources": sources, "sub_questions": subs}
+
+
+class ReadRequest(BaseModel):
+    url: str
+
+
+@router.post("/read")
+async def read_url(req: ReadRequest):
+    """Keyless smart-read of any URL — YouTube transcript, Reddit thread,
+    GitHub readme/file, or clean article text. No API key."""
+    from app.services.readers import smart_read
+    d = await smart_read(req.url.strip())
+    # Cap payload so a huge page doesn't flood the chat.
+    d["text"] = (d.get("text") or "")[:8000]
+    return d
+
+
 @router.get("/tasks")
 async def list_tasks():
     """Show all running/recent agent pool tasks."""

@@ -25,6 +25,37 @@ _SECURITY_HEADERS = {
 }
 
 
+from starlette.responses import JSONResponse
+
+# Paths reachable WITHOUT a session even when login is enabled: the login
+# endpoints themselves, health, and the static UI shell (so the login screen
+# can load). Everything else under /api and /v1 needs a valid token.
+_AUTH_EXEMPT_PREFIXES = ("/api/auth", "/api/health")
+
+
+class LocalAuthMiddleware(BaseHTTPMiddleware):
+    """Gate /api and /v1 behind the local password — but ONLY once the user has
+    set one. With no password set, auth_local.is_enabled() is False and this is a
+    complete pass-through, so the open-localhost default is untouched."""
+
+    async def dispatch(self, request: Request, call_next):
+        from app.services import auth_local
+        path = request.url.path
+        if (
+            auth_local.is_enabled()
+            and path.startswith(("/api", "/v1"))
+            and not path.startswith(_AUTH_EXEMPT_PREFIXES)
+        ):
+            token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            if not token:
+                token = request.query_params.get("token", "").strip()  # SSE/EventSource can't set headers
+            if not auth_local.validate_token(token or None):
+                return JSONResponse(
+                    {"detail": "Login required.", "auth": "required"}, status_code=401
+                )
+        return await call_next(request)
+
+
 class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         rid = request.headers.get("X-Request-ID", "").strip()[:64] or uuid.uuid4().hex[:12]

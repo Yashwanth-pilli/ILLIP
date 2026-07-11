@@ -5,6 +5,7 @@ REM   illip code              -> terminal coding agent in a fresh window (seriou
 REM   illip code --continue   -> resume your last terminal conversation
 REM   illip build "make X"    -> run the agent crew on a folder
 REM   illip repair            -> fix a stuck/broken ILLIP (kill, heal, rollback, restart)
+REM   illip stop              -> close ILLIP + Ollama, notify what was closed
 REM   illip status / version  -> other subcommands
 set "ILLIPDIR=E:\Projects\ILLIP_AI"
 set "PY=%ILLIPDIR%\.venv\Scripts\python.exe"
@@ -26,6 +27,13 @@ REM is broken — imports nothing from the app).
 if /i "%~1"=="repair" (
     cd /d "%ILLIPDIR%"
     "%PY%" scripts\repair.py
+    goto :eof
+)
+
+REM `illip stop` -> close the ILLIP server + Ollama, notify what was closed.
+if /i "%~1"=="stop" (
+    cd /d "%ILLIPDIR%"
+    "%PY%" scripts\stop.py
     goto :eof
 )
 

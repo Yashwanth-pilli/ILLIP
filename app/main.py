@@ -176,7 +176,7 @@ async def lifespan(app: FastAPI):
 
     # Stop metrics collector
     from app.monitoring.collector import get_metrics_collector
-    await get_metrics_collector().stop()
+    get_metrics_collector().stop()  # stop() is sync (-> None); awaiting it crashed shutdown
 
 
 # Create FastAPI app with lifespan handler
@@ -192,6 +192,11 @@ app = FastAPI(
 # API key auth — enabled when ILLIP_API_KEYS set in .env
 from app.auth import APIKeyMiddleware
 app.add_middleware(APIKeyMiddleware)
+
+# Local single-user login — enforced ONLY after the user sets a password
+# (auth_local.is_enabled()); otherwise a complete pass-through.
+from app.middleware import LocalAuthMiddleware
+app.add_middleware(LocalAuthMiddleware)
 
 # Request ID + timing log + security headers (outermost, so auth failures are logged too)
 from app.middleware import RequestContextMiddleware

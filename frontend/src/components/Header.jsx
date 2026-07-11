@@ -1,4 +1,21 @@
 import React, { useState } from 'react'
+import { setLoginPassword, logoutLocal } from './LoginGate.jsx'
+
+async function handleLockClick() {
+  let enabled = false
+  try {
+    const r = await fetch('/api/auth/status')
+    enabled = (await r.json()).enabled
+  } catch { /* backend down — treat as not enabled */ }
+  if (!enabled) {
+    const pw = window.prompt('Set a password to lock ILLIP (min 4 chars). Anyone opening ILLIP will need it. Personal data stays on this PC.')
+    if (!pw) return
+    try { await setLoginPassword(pw); window.alert('Login enabled. ILLIP will ask for this password from now on.') }
+    catch (e) { window.alert('Could not set password: ' + e.message) }
+  } else {
+    if (window.confirm('Log out of ILLIP now? You will need the password to get back in.')) logoutLocal()
+  }
+}
 
 function SafetyBadge({ hwLive }) {
   if (!hwLive || hwLive.gpu_temp_c == null) return null
@@ -110,6 +127,7 @@ export default function Header({
             <button className="icon-btn" onClick={() => onDeleteProject(activeProject)} title="Delete this space">🗑️</button>
           )}
           <button className={`mode-btn refresh-btn`} onClick={onRefresh} title="Clear context">↺ Refresh</button>
+          <button className="mode-btn" onClick={handleLockClick} title="Lock ILLIP with a password / log out — data stays on this PC">🔒 Lock</button>
           <button
             className={`mode-btn ${autoSpeak ? 'active' : ''}`}
             onClick={onAutoSpeak}

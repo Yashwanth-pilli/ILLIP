@@ -17,6 +17,7 @@ from app.skills.builtin.computer_skill import OpenAppSkill, FindFilesSkill, Read
 from app.skills.builtin.system_skill import SystemHealthSkill, CleanJunkSkill
 from app.skills.builtin.file_ops_skill import MoveFileSkill, CopyFileSkill
 from app.skills.builtin.gstack_skill import GstackSkill
+from app.skills.builtin.read_url_skill import ReadUrlSkill
 
 
 def _register_builtins() -> None:
@@ -40,6 +41,7 @@ def _register_builtins() -> None:
     reg.register(MoveFileSkill())
     reg.register(CopyFileSkill())
     reg.register(GstackSkill())
+    reg.register(ReadUrlSkill())
 
 
 _register_builtins()

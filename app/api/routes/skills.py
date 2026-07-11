@@ -23,6 +23,14 @@ class CleanupRequest(BaseModel):
     temp_path: str
 
 
+@router.get("/directory")
+async def skills_directory(category: str = "", query: str = ""):
+    """Browse the curated agent-skills directory (from awesome-agent-skills).
+    Discovery only — follow each link to install in your agent tool."""
+    from app.services.skills_catalog import directory
+    return directory(category=category, query=query)
+
+
 @router.get("/")
 async def list_skills():
     """List all registered skills."""

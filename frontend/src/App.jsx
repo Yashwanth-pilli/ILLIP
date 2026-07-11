@@ -491,6 +491,56 @@ export default function App() {
       { cmd: '/getsafe', run: (arg) => api.guardianGetSafe(arg), wait: '🛡️ Checking reputation + building a safe-download guide…', needArg: 'What do you want to download? `/getsafe a free video editor` or `/getsafe repack of <game>`' },
       { cmd: '/gstack', run: (arg) => api.gstack(arg), wait: '🌿 Reading the repo (branch, status, staged changes)…' },
       {
+        cmd: '/skills',
+        wait: '🧩 Loading the agent-skills directory…',
+        run: async (arg) => {
+          const d = await api.skillsDirectory(arg.trim(), '')
+          const byCat = {}
+          for (const s of (d.skills || [])) (byCat[s.category] = byCat[s.category] || []).push(s)
+          let md = `**Agent Skills Directory** — ${d.count} of ${d.total} shown${arg.trim() ? ` (category: ${arg.trim()})` : ''}  \n_categories: ${(d.categories || []).join(', ')}_  \n\n`
+          for (const cat of Object.keys(byCat).sort()) {
+            md += `**${cat}**\n`
+            for (const s of byCat[cat]) md += `- [${s.id}](${s.url}) — ${s.description}\n`
+            md += '\n'
+          }
+          md += `\n_${d.note}_  \nSource: ${d.source}\n\nFilter by category: \`/skills web\`, \`/skills security\`, \`/skills data\`…`
+          return { report_md: md }
+        },
+      },
+      {
+        cmd: '/read',
+        wait: '📖 Reading that link (transcript / thread / readme / article)…',
+        needArg: 'Paste a URL: `/read https://youtube.com/watch?v=…` (YouTube, GitHub, or any page)',
+        run: async (arg) => {
+          const d = await api.readUrl(arg)
+          if (d.error && !d.text) return { report_md: `**Couldn't read that:** ${d.error}` }
+          return { report_md: `**${d.title || d.url}**  \n_source: ${d.source}_\n\n${(d.text || '').slice(0, 6000)}${(d.text || '').length > 6000 ? '\n\n…(truncated)' : ''}` }
+        },
+      },
+      {
+        cmd: '/ask',
+        wait: '🔎 Searching the live web, reading the top pages, writing a cited answer…',
+        needArg: 'Ask anything current: `/ask latest AI model releases this month`',
+        run: async (arg) => {
+          const d = await api.ask(arg)
+          if (d.error || !d.answer) return { report_md: `**Couldn't answer:** ${d.error || 'no sources found. Is Ollama running? Type `illip` to start it.'}` }
+          const src = (d.sources || []).map((s, i) => `${i + 1}. [${(s.title || s.url).slice(0, 80)}](${s.url})`).join('\n')
+          return { report_md: `${d.answer}\n\n---\n**Sources**\n${src || '_none_'}` }
+        },
+      },
+      {
+        cmd: '/sharpen',
+        wait: '🪒 Drafting, then critiquing and refining the answer…',
+        needArg: 'Ask something: `/sharpen explain how HTTPS keeps data private`',
+        run: async (arg) => {
+          const d = await api.sharpen(arg)
+          const tag = d.improved
+            ? `✅ _Sharpened — the critique caught something and the answer was improved (${d.rounds_run} round${d.rounds_run === 1 ? '' : 's'}, brain: ${d.provider || 'local'})._`
+            : `ℹ️ _Draft already held up — no changes needed (brain: ${d.provider || 'local'})._`
+          return { report_md: `${d.answer}\n\n---\n${tag}` }
+        },
+      },
+      {
         cmd: '/caveman',
         wait: '⚙️ Updating reply style…',
         run: async (arg) => {

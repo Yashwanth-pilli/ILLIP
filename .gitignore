@@ -112,3 +112,6 @@ data/idea_vault/
 
 # Stray uvicorn logs in repo root
 /uvicorn*.log
+
+# Local login secret — password hash + sessions, never commit
+data/auth.json

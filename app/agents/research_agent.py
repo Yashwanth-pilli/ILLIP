@@ -54,7 +54,7 @@ class ResearchAgent:
         """
         from app.services.chat_service import get_llm
         from app.services.search_service import web_search as search
-        from app.services.browser_service import fetch_pages_parallel
+        from app.services.readers import read_many as fetch_pages_parallel
 
         llm = get_llm()
 

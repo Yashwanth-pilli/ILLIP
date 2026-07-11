@@ -1267,3 +1267,200 @@ body {
   opacity: 0.7;
 }
 .msg-action-btn:hover { opacity: 1; background: rgba(255, 255, 255, 0.06); }
+
+/* ════════════════════════════════════════════════════════════════════
+   PROFESSIONAL POLISH PASS  (appended last → wins over rules above)
+   Goal: quiet, product-grade look. Consistent spacing/radius/shadow,
+   softer surfaces, restrained accent. No neon glow, no logo change.
+   ════════════════════════════════════════════════════════════════════ */
+:root {
+  --r-xs: 6px;    /* tiny controls */
+  --r-sm: 8px;    /* buttons, selects, inputs */
+  --r-md: 12px;   /* cards, bubbles, panels */
+  --r-pill: 999px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.30);
+  --shadow-2: 0 4px 16px rgba(0,0,0,.28);
+  --ease: .16s cubic-bezier(.4,0,.2,1);
+  --accent: #4fd1c5;
+  --accent-soft: rgba(79,209,197,.12);
+}
+
+/* Kill leftover glows/animation noise everywhere for a calm surface */
+.grid-bg { opacity: .5 !important; }
+.cat-wrap { filter: none !important; }               /* logo untouched, just no glow halo */
+.cat-wrap:hover { filter: brightness(1.08) !important; }
+
+/* ── Typography: readable, deliberate ─────────────────────────────── */
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02","cv03","cv04","cv11"; }
+.brand-name { font-weight: 700 !important; letter-spacing: .04em !important; font-size: 17px !important; }
+.brand-sub  { font-size: 9.5px !important; letter-spacing: .12em !important; color: var(--text2) !important; }
+.message-content { font-size: 14.5px !important; line-height: 1.62 !important; letter-spacing: .002em; }
+.message-content p { margin: 0 0 .7em; }
+.message-content p:last-child { margin-bottom: 0; }
+
+/* ── Header: taller, calmer, aligned ──────────────────────────────── */
+.app-header {
+  padding: 10px 18px !important;
+  gap: 16px !important;
+  background: rgba(18,19,23,.86) !important;
+  backdrop-filter: blur(14px) saturate(1.1) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.header-controls { gap: 8px !important; }
+
+/* ── Unified control surface: every button/select same height + feel ─ */
+.icon-btn, .mode-btn, .action-btn, .refresh-btn,
+.model-select-header, .project-select, .suggestion-btn {
+  height: 32px !important;
+  border-radius: var(--r-sm) !important;
+  box-shadow: none !important;
+  transition: background var(--ease), border-color var(--ease), color var(--ease) !important;
+  font-weight: 600 !important;
+}
+.icon-btn { width: 32px !important; font-size: 17px !important; color: var(--text2) !important; }
+.model-select-header, .project-select {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  padding: 0 12px !important;
+}
+.model-select-header { color: var(--accent) !important; }
+.icon-btn:hover, .mode-btn:hover:not(:disabled),
+.model-select-header:hover, .project-select:hover {
+  border-color: var(--border2) !important;
+  background: var(--surface2) !important;
+  color: var(--text) !important;
+}
+.mode-btn.active { background: var(--accent-soft) !important; border-color: rgba(79,209,197,.5) !important; color: var(--accent) !important; }
+
+/* ── Message bubbles: softer, roomier, layered ────────────────────── */
+.message-content { padding: 13px 16px !important; border-radius: var(--r-md) !important; box-shadow: var(--shadow-1) !important; }
+.message.assistant .message-content {
+  background: #15181e !important;
+  border: 1px solid rgba(255,255,255,.07) !important;
+}
+.message.user .message-content {
+  background: var(--accent-soft) !important;
+  border: 1px solid rgba(79,209,197,.24) !important;
+  color: #e9fffb !important;
+}
+.message-content pre, .message-content code { border-radius: var(--r-sm) !important; }
+.message-content pre { border: 1px solid rgba(255,255,255,.08) !important; box-shadow: var(--shadow-1); }
+
+/* ── Input area: a clear, focused field ───────────────────────────── */
+.input-area { background: rgba(20,22,27,.9) !important; border-top: 1px solid var(--border) !important; }
+.message-input {
+  border-radius: var(--r-md) !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: #0e0f13 !important;
+  transition: border-color var(--ease), box-shadow var(--ease) !important;
+}
+.message-input:focus {
+  border-color: rgba(79,209,197,.55) !important;
+  box-shadow: 0 0 0 3px rgba(79,209,197,.14) !important;
+  outline: none !important;
+}
+.send-button {
+  background: var(--accent) !important; color: #05221e !important;
+  border-radius: var(--r-sm) !important; font-weight: 700 !important;
+  transition: filter var(--ease) !important;
+}
+.send-button:hover:not(:disabled) { filter: brightness(1.08) !important; }
+.send-button.stop-button { background: var(--pink) !important; color: #2a0716 !important; }
+
+/* ── Cards, panels, dialogs: consistent radius + soft depth ────────── */
+.agent-card, .game-card, .create-card, .agents-run, .terminal,
+.dialog, .modal-box, .research-panel, .browser-panel, .slide-panel,
+.mem-entry, .ws-file-content, .agents-clarify {
+  border-radius: var(--r-md) !important;
+  box-shadow: var(--shadow-2) !important;
+}
+.slide-panel { box-shadow: 8px 0 32px rgba(0,0,0,.34) !important; }
+
+/* ── Nav rail: quieter, clearer active state ──────────────────────── */
+.nav-btn, .nav-item { border-radius: var(--r-sm) !important; transition: background var(--ease), color var(--ease) !important; }
+.nav-btn:hover, .nav-item:hover { background: rgba(255,255,255,.06) !important; }
+.nav-btn.active, .nav-item.active { background: var(--accent-soft) !important; color: var(--accent) !important; }
+
+/* Focus-visible ring for keyboard users (accessibility polish) */
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid rgba(79,209,197,.6) !important; outline-offset: 1px;
+}
+
+/* ── Login gate ───────────────────────────────────────────────────── */
+.login-gate {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(1200px 600px at 50% -10%, #16181d, #0d0e11 60%);
+}
+.login-card {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: min(90vw, 340px); padding: 32px 28px;
+  background: rgba(22,24,29,.9); border: 1px solid var(--border2);
+  border-radius: 16px; box-shadow: var(--shadow-2); backdrop-filter: blur(14px);
+}
+.login-logo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
+.login-title { font-size: 22px; font-weight: 700; letter-spacing: .05em; color: var(--text); margin: 0; }
+.login-sub { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text2); margin: -6px 0 6px; }
+.login-input {
+  width: 100%; padding: 11px 14px; font-size: 14px;
+  background: #0e0f13; color: var(--text);
+  border: 1px solid rgba(255,255,255,.14); border-radius: var(--r-sm); outline: none;
+}
+.login-input:focus { border-color: rgba(79,209,197,.55); box-shadow: 0 0 0 3px rgba(79,209,197,.14); }
+.login-btn {
+  width: 100%; padding: 11px; font-size: 14px; font-weight: 700; cursor: pointer;
+  background: var(--accent); color: #05221e; border: none; border-radius: var(--r-sm);
+}
+.login-btn:disabled { opacity: .55; cursor: default; }
+.login-error { color: #ff8fa3; font-size: 12px; }
+
+/* ════════════════════════════════════════════════════════════════════
+   PREMIUM TOUCHES  (appended last) — a few tasteful accents that read as
+   "polished product" without a risky teardown. Easy to dial back.
+   ════════════════════════════════════════════════════════════════════ */
+:root {
+  --accent-2: #63e6d7;                 /* lighter teal for gradients */
+  --grad: linear-gradient(135deg, #4fd1c5 0%, #63e6d7 100%);
+}
+/* Gradient wordmark */
+.brand-name {
+  background: linear-gradient(90deg, #e8eaed 0%, #9fe9e0 120%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.brand-ai { -webkit-text-fill-color: var(--accent); }
+/* Send + primary buttons get depth + gradient */
+.send-button, .login-btn, .suggestion-btn {
+  background: var(--grad) !important;
+  box-shadow: 0 2px 10px rgba(79,209,197,.28) !important;
+}
+.send-button:hover:not(:disabled), .login-btn:hover:not(:disabled) { filter: brightness(1.06) !important; }
+/* User bubble: subtle gradient tint + accent edge */
+.message.user .message-content {
+  background: linear-gradient(135deg, rgba(79,209,197,.16), rgba(99,230,215,.08)) !important;
+  border-color: rgba(99,230,215,.28) !important;
+}
+/* Active nav/mode chips glow softly */
+.mode-btn.active, .nav-btn.active, .nav-item.active {
+  box-shadow: inset 0 0 0 1px rgba(99,230,215,.25), 0 0 12px rgba(79,209,197,.10) !important;
+}
+/* Thin gradient hairline under the header for a premium seam */
+.app-header { position: relative; }
+.app-header::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(79,209,197,.35), transparent);
+}
+/* Assistant code blocks: subtle top accent bar */
+.message.assistant .message-content pre { position: relative; }
+.message.assistant .message-content pre::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--grad); border-radius: var(--r-sm) var(--r-sm) 0 0; opacity: .6;
+}
+/* Gentle fade-in for incoming messages */
+@keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.message { animation: msgIn .22s ease both; }
+/* Status dot: calmer, no harsh neon */
+.status-dot { box-shadow: 0 0 6px rgba(78,201,138,.6) !important; }

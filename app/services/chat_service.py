@@ -154,8 +154,10 @@ class _LLMClient:
         provider = await get_provider()
         msgs: List[Message] = []
         if system:
-            msgs.append(Message(role="system", content=system))
-        msgs.append(Message(role="user", content=prompt))
+            msgs.append(Message(role="system", content=system,
+                                timestamp=get_current_timestamp()))
+        msgs.append(Message(role="user", content=prompt,
+                            timestamp=get_current_timestamp()))
         return await provider.safe_generate(messages=msgs, temperature=0.3)
 
 
