@@ -451,9 +451,15 @@ export default function App() {
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   const handleChat = useCallback(async (message, imageFile = null, docFile = null) => {
-    // Slash command: /game — open the arcade. No LLM call.
-    if (typeof message === 'string' && message.trim().toLowerCase() === '/game') {
+    // Slash command: /game /games — open the arcade. No LLM call.
+    if (typeof message === 'string' && ['/game', '/games'].includes(message.trim().toLowerCase())) {
       setGamesOpen(true)
+      return
+    }
+
+    // Slash command: /video — open the video generator. No LLM call.
+    if (typeof message === 'string' && ['/video', '/vid'].includes(message.trim().toLowerCase())) {
+      setVideoPanelOpen(true)
       return
     }
 
@@ -466,11 +472,12 @@ export default function App() {
       return
     }
 
-    // Slash command: /task <goal> — run it through the agent company, live.
-    if (typeof message === 'string' && message.trim().toLowerCase().startsWith('/task')) {
-      const goal = message.trim().slice(5).trim()
+    // Slash command: /task <goal> · /team <goal> — run it through the agent company, live.
+    if (typeof message === 'string' &&
+        (message.trim().toLowerCase().startsWith('/task') || message.trim().toLowerCase().startsWith('/team'))) {
+      const goal = message.trim().replace(/^\/(task|team)\s*/i, '').trim()
       if (goal) { addMessage('user', `/task ${goal}`); setAgentTask({ goal, loop: false }) }
-      else addMessage('assistant', 'Give me a goal: `/task build a landing page for a coffee shop`')
+      else addMessage('assistant', 'Give me a goal: `/team build a landing page for a coffee shop`')
       return
     }
 

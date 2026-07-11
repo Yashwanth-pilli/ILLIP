@@ -222,27 +222,6 @@ export default function ChatMain({
             className="action-btn imggen"
             onClick={onOpenImage}
           >Image</button>
-          <button
-            className="action-btn vidgen"
-            onClick={onOpenVideo}
-          >Video</button>
-          <button
-            className="action-btn game"
-            onClick={onOpenGames}
-          >Games</button>
-          <button
-            className="action-btn team"
-            onClick={() => {
-              const g = inputValue.trim()
-              if (g) { onChat('/task ' + g); setInputValue('') }
-              else {
-                // No goal typed — don't silently do nothing. Prompt for one.
-                inputRef.current?.focus()
-                setInputValue('build me ')
-              }
-            }}
-            title="Type what to build, then hit Team to run it through the agent crew"
-          >Team</button>
         </div>
 
         {/* Image preview */}
