@@ -120,9 +120,15 @@ async def read_hardware_state_async() -> HardwareState:
 
 
 def get_safe_context_limit(state: HardwareState, requested: int = 8192) -> int:
-    """Return a safe num_ctx given hardware pressure."""
+    """Return a safe num_ctx given hardware pressure.
+
+    Floors matter: a real prompt carrying the system prompt + memory + web-search
+    results is routinely ~3000+ tokens, so a cap below that makes Ollama 400
+    ("exceeds context size") and the answer dies mid-stream. 4096 is the smallest
+    that still fits a normal grounded prompt; callers that build a bigger prompt
+    must size num_ctx to fit it (see chat stream)."""
     if state.pressure == "critical":
-        return min(requested, 2048)
+        return min(requested, 4096)
     if state.pressure == "high":
         return min(requested, 4096)
     return requested

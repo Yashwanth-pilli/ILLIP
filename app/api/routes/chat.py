@@ -288,6 +288,16 @@ async def stream_chat_message(request: ChatRequest):
         user_msg = Message(role="user", content=request.message, timestamp=ts())
         chat_service.append_message(user_msg, project_id)
 
+        # Size num_ctx to FIT the actual prompt. A hardware "critical" cap can be
+        # smaller than a prompt carrying web-search + memory (~3000+ tokens), which
+        # makes Ollama 400 ("exceeds context size") and kills the answer mid-stream.
+        # Estimate ~4 chars/token, add reply headroom, round up to a sane num_ctx.
+        est_prompt = sum(len(m.content or "") for m in messages) // 4
+        need = est_prompt + 1024  # room for the model's reply
+        if need > ctx_limit_use:
+            ctx_limit_use = 8192 if need > 4096 else 4096
+            yield f"data: {json.dumps({'note': f'context resized to {ctx_limit_use} to fit the prompt'})}\n\n"
+
         registry = get_registry()
         tool_specs = registry.to_tool_specs()
         collected = []
@@ -298,10 +308,15 @@ async def stream_chat_message(request: ChatRequest):
         if run_tools:
             MAX_TOOL_ROUNDS = 3
             for _ in range(MAX_TOOL_ROUNDS):
-                content, tool_calls = await provider.generate_with_tools(
-                    active_messages, tool_specs,
-                    model=chosen_model, num_ctx=ctx_limit_use,
-                )
+                try:
+                    content, tool_calls = await provider.generate_with_tools(
+                        active_messages, tool_specs,
+                        model=chosen_model, num_ctx=ctx_limit_use,
+                    )
+                except Exception as e:
+                    logger.error(f"Tool phase failed: {e}")
+                    yield f"data: {json.dumps({'error': str(e)[:300]})}\n\n"
+                    content, tool_calls = "", []  # fall through to plain stream
                 if not tool_calls:
                     if content:
                         for word in content.split(" "):
@@ -352,11 +367,19 @@ async def stream_chat_message(request: ChatRequest):
                             timestamp=ts(),
                         )
                         break
-            async for token in provider.stream_response(
-                fallback_messages, model=chosen_model, num_ctx=ctx_limit_use
-            ):
-                collected.append(token)
-                yield f"data: {json.dumps({'token': token})}\n\n"
+            try:
+                async for token in provider.stream_response(
+                    fallback_messages, model=chosen_model, num_ctx=ctx_limit_use
+                ):
+                    collected.append(token)
+                    yield f"data: {json.dumps({'token': token})}\n\n"
+            except Exception as e:
+                # Never die silently mid-answer — tell the user what happened.
+                logger.error(f"Stream failed: {e}")
+                warn = f"\n\n⚠️ Answer stopped: {str(e)[:180]}"
+                collected.append(warn)
+                yield f"data: {json.dumps({'token': warn})}\n\n"
+                yield f"data: {json.dumps({'error': str(e)[:300]})}\n\n"
 
         full = "".join(collected)
         chat_service.append_message(
