@@ -1164,6 +1164,8 @@ export default function App() {
           onOpenGames={() => setGamesOpen(true)}
           onToggleForceLarge={() => setForceLarge(p => !p)}
           onToggleForceSearch={() => setForceSearch(p => !p)}
+          chatModes={chatModes}
+          onToggleChatMode={toggleChatMode}
           onMic={toggleMic}
           onSetPendingImage={setPendingImage}
           onSetPendingDocument={setPendingDocument}

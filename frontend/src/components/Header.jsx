@@ -135,20 +135,6 @@ export default function Header({
           >
             Speak
           </button>
-          <button
-            className={`mode-btn ${chatModes.caveman ? 'active' : ''}`}
-            onClick={() => onToggleChatMode && onToggleChatMode('caveman')}
-            title="Caveman mode — terse, faster replies on local hardware"
-          >
-            Caveman
-          </button>
-          <button
-            className={`mode-btn ${chatModes.ponytail ? 'active' : ''}`}
-            onClick={() => onToggleChatMode && onToggleChatMode('ponytail')}
-            title="Ponytail mode — simplest solution, flags over-engineering"
-          >
-            Ponytail
-          </button>
         </div>
 
         <div className="header-right">

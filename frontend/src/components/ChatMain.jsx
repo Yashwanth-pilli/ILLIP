@@ -48,11 +48,38 @@ export default function ChatMain({
   onOpenBrowser, onCloseBrowser, onRunBrowser,
   onOpenImage, onCloseImage, onOpenVideo, onCloseVideo,
   onFeedback, onSpeak,
+  chatModes = {}, onToggleChatMode,
 }) {
   const [inputValue, setInputValue] = useState('')
   const [menuIndex, setMenuIndex] = useState(0)   // highlighted row in the palette
   const [slashDismissed, setSlashDismissed] = useState(false) // Esc / accept hides it
+  const [toolsOpen, setToolsOpen] = useState(false)  // the "+" tools menu
   const inputRef = useRef(null)
+  const toolsRef = useRef(null)
+
+  // Close the "+" menu on outside click / Escape.
+  useEffect(() => {
+    if (!toolsOpen) return
+    const onDown = (e) => { if (toolsRef.current && !toolsRef.current.contains(e.target)) setToolsOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setToolsOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [toolsOpen])
+
+  // Run a "+" menu action, then close the menu.
+  const tool = (fn) => () => { fn(); setToolsOpen(false) }
+  const runTeam = () => {
+    const g = inputValue.trim()
+    if (g) { onChat('/task ' + g); setInputValue('') }
+    else { inputRef.current?.focus(); setInputValue('build me ') }
+    setToolsOpen(false)
+  }
+  const runResearch = () => {
+    const q = inputValue.trim()
+    if (q) { onStartResearch(q) } else { inputRef.current?.focus() }
+    setToolsOpen(false)
+  }
 
   // Slash-command matching for the command palette + input highlight
   const trimmedInput = inputValue.trim()
@@ -199,18 +226,37 @@ export default function ChatMain({
           </div>
         )}
 
-        {/* Mode buttons */}
-        <div className="input-controls">
-          <span className="model-badge">{activeModel || 'Auto'}</span>
-          <button className="mode-btn refresh-btn" onClick={() => onChat('!refresh')} title="Clear context">↺ New chat</button>
-        </div>
-
-        {/* Action buttons */}
-        <div className="action-btns">
+        {/* "+" tools menu — everything lives here now, ChatGPT/Claude style */}
+        <div className="tools-wrap" ref={toolsRef}>
           <button
-            className="action-btn imggen"
-            onClick={onOpenImage}
-          >Image</button>
+            type="button"
+            className={`tools-plus ${toolsOpen ? 'open' : ''}`}
+            onClick={() => setToolsOpen(o => !o)}
+            title="Tools & modes"
+            aria-label="Tools and modes"
+          >+</button>
+
+          {toolsOpen && (
+            <div className="tools-menu" role="menu">
+              <div className="tools-group-label">Create</div>
+              <button className="tools-item" onClick={tool(onOpenImage)}>Image<span>generate a picture</span></button>
+              <button className="tools-item" onClick={tool(onOpenVideo)}>Video<span>generate a clip</span></button>
+
+              <div className="tools-group-label">Web</div>
+              <button className="tools-item" onClick={runResearch}>Research<span>deep, cited answer on your text</span></button>
+              <button className="tools-item" onClick={tool(onOpenBrowser)}>Browser<span>open a live web browser</span></button>
+
+              <div className="tools-group-label">Build</div>
+              <button className="tools-item" onClick={runTeam}>Team<span>run the agent crew on your goal</span></button>
+              <button className="tools-item" onClick={tool(onOpenGames)}>Games<span>the arcade</span></button>
+
+              <div className="tools-group-label">Reply style</div>
+              <button className={`tools-item toggle ${forceSearch ? 'on' : ''}`} onClick={onToggleForceSearch}>Web search<span>search the web before replying</span></button>
+              <button className={`tools-item toggle ${forceLarge ? 'on' : ''}`} onClick={onToggleForceLarge}>Big model<span>force the largest brain</span></button>
+              <button className={`tools-item toggle ${chatModes.caveman ? 'on' : ''}`} onClick={() => onToggleChatMode && onToggleChatMode('caveman')}>Caveman<span>terse replies — faster on your PC</span></button>
+              <button className={`tools-item toggle ${chatModes.ponytail ? 'on' : ''}`} onClick={() => onToggleChatMode && onToggleChatMode('ponytail')}>Ponytail<span>simplest solution, flags bloat</span></button>
+            </div>
+          )}
         </div>
 
         {/* Image preview */}
