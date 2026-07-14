@@ -1,14 +1,19 @@
 # ILLIP AI — one-line installer for Windows
-# Run: irm https://raw.githubusercontent.com/YOUR_USER/ILLIP_AI/main/install.ps1 | iex
+# Run: irm https://raw.githubusercontent.com/Yashwanth-pilli/ILLIP/main/install.ps1 | iex
 
 param(
-    [string]$RepoUrl  = "https://github.com/YOUR_USER/ILLIP_AI",
+    [string]$RepoUrl  = "https://github.com/Yashwanth-pilli/ILLIP.git",
     [string]$InstallDir = ".\illip_ai"
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "=== ILLIP AI Installer ===" -ForegroundColor Cyan
+Write-Host "This installer will:"
+Write-Host "  1) Download or update ILLIP source code from GitHub"
+Write-Host "  2) Install Python dependencies from requirements.txt"
+Write-Host "  3) Create .env and data folders for first run"
+Write-Host ""
 
 # Check Python
 try {
@@ -28,19 +33,23 @@ try {
 }
 
 # Clone or pull
-if (Test-Path $InstallDir) {
-    Write-Host "Directory $InstallDir exists — pulling latest..."
-    git -C $InstallDir pull origin main
+if (Test-Path (Join-Path $InstallDir ".git")) {
+    Write-Host "Directory $InstallDir exists — pulling latest code from $RepoUrl ..."
+    git -C $InstallDir pull --ff-only origin main
+} elseif (Test-Path $InstallDir) {
+    Write-Host "ERROR: $InstallDir already exists but is not a git repository." -ForegroundColor Red
+    Write-Host "Please remove it or pass a different -InstallDir."
+    exit 1
 } else {
-    Write-Host "Cloning ILLIP AI..."
+    Write-Host "Downloading ILLIP source code from $RepoUrl ..."
     git clone --depth=1 $RepoUrl $InstallDir
 }
 
 Set-Location $InstallDir
 
 # Install deps
-Write-Host "Installing dependencies..."
-python -m pip install -r requirements.txt -q
+Write-Host "Installing Python dependencies from requirements.txt (downloads may take a few minutes)..."
+python -m pip install -r requirements.txt
 
 # Setup .env
 if (-not (Test-Path ".env")) {

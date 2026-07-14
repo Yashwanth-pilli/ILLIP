@@ -29,6 +29,20 @@ ILLIP AI is a portable, private, self-improving AI system that runs on your own 
 .\scripts\run_backend.ps1
 ```
 
+**One-command terminal install (auto-download + guided output):**
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/Yashwanth-pilli/ILLIP/main/install.ps1 | iex
+```
+
+```bash
+# Linux/macOS
+curl -fsSL https://raw.githubusercontent.com/Yashwanth-pilli/ILLIP/main/install.sh | bash
+```
+
+The installer prints each step clearly (code download/update, dependency installation, and first-run setup) so users can see exactly what is being installed.
+
 | URL | What |
 |---|---|
 | `http://127.0.0.1:8000/` | The app (React UI) |

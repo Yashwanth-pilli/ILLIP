@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # ILLIP AI — one-line installer
-# curl -fsSL https://raw.githubusercontent.com/YOUR_USER/ILLIP_AI/main/install.sh | bash
+# curl -fsSL https://raw.githubusercontent.com/Yashwanth-pilli/ILLIP/main/install.sh | bash
 
 set -e
 
-REPO_URL="${ILLIP_REPO:-https://github.com/YOUR_USER/ILLIP_AI}"
+REPO_URL="${ILLIP_REPO:-https://github.com/Yashwanth-pilli/ILLIP.git}"
 INSTALL_DIR="${ILLIP_DIR:-./illip_ai}"
 PYTHON="${ILLIP_PYTHON:-python3}"
 
 echo "=== ILLIP AI Installer ==="
+echo "This installer will:"
+echo "  1) Download or update ILLIP source code from GitHub"
+echo "  2) Create a Python virtual environment (optional, default on)"
+echo "  3) Install Python dependencies from requirements.txt"
+echo "  4) Create .env and data folders for first run"
+echo ""
 
 # Check Python
 if ! command -v "$PYTHON" &>/dev/null; then
@@ -25,18 +31,22 @@ if ! command -v git &>/dev/null; then
 fi
 
 # Clone
-if [ -d "$INSTALL_DIR" ]; then
-  echo "Directory $INSTALL_DIR exists — pulling latest..."
-  git -C "$INSTALL_DIR" pull origin main
+if [ -d "$INSTALL_DIR/.git" ]; then
+  echo "Directory $INSTALL_DIR exists — pulling latest code from $REPO_URL ..."
+  git -C "$INSTALL_DIR" pull --ff-only origin main
+elif [ -d "$INSTALL_DIR" ]; then
+  echo "ERROR: $INSTALL_DIR already exists but is not a git repository."
+  echo "Please remove it or set ILLIP_DIR to a different folder."
+  exit 1
 else
-  echo "Cloning ILLIP AI..."
+  echo "Downloading ILLIP source code from $REPO_URL ..."
   git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"
 fi
 
 cd "$INSTALL_DIR"
 
 # Virtualenv (optional but recommended)
-if command -v python3 -m venv &>/dev/null && [ "${ILLIP_VENV:-1}" = "1" ]; then
+if "$PYTHON" -m venv --help >/dev/null 2>&1 && [ "${ILLIP_VENV:-1}" = "1" ]; then
   if [ ! -d ".venv" ]; then
     echo "Creating virtualenv..."
     "$PYTHON" -m venv .venv
@@ -46,8 +56,8 @@ if command -v python3 -m venv &>/dev/null && [ "${ILLIP_VENV:-1}" = "1" ]; then
 fi
 
 # Install deps
-echo "Installing dependencies..."
-"$PYTHON" -m pip install -r requirements.txt -q
+echo "Installing Python dependencies from requirements.txt (downloads may take a few minutes)..."
+"$PYTHON" -m pip install -r requirements.txt
 
 # Setup .env
 if [ ! -f ".env" ]; then
