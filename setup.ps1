@@ -129,6 +129,7 @@ foreach ($folder in @("data", "data/workspaces", "data/tasks", "data/logs", "dat
 # -- 4. Ollama ----------------------------------------------------------------
 Step "Checking for Ollama (runs the AI model on your computer, fully private)..."
 Refresh-Path
+$skipOllama = $false
 if (-not (Has-Command "ollama")) {
     Warn "Ollama not found."
     if ((Has-Command "winget") -and (Ask "May I install Ollama for you now? (free, from ollama.com via winget)")) {
@@ -136,17 +137,16 @@ if (-not (Has-Command "ollama")) {
         Refresh-Path
     }
     if (-not (Has-Command "ollama")) {
-        Fail "Ollama could not be installed automatically."
-        Say ""
-        Say "  Do this yourself (takes 2 minutes):" Yellow
-        Say "  1. I am opening https://ollama.com/download in your browser now." Yellow
-        Say "  2. Click 'Download for Windows' and run the file." Yellow
-        Say "  3. Click through the installer (just keep clicking Next)." Yellow
-        Say "  4. When done, double-click setup.bat again." Yellow
-        Start-Process "https://ollama.com/download"
-        Exit 1
+        Warn "Skipping the local model - ILLIP still works, pick one of these later:"
+        Say "  a) Local + private: install Ollama from https://ollama.com/download," Yellow
+        Say "     then double-click setup.bat again." Yellow
+        Say "  b) Cloud key (no big download): put an OpenRouter or Groq API key" Yellow
+        Say "     into the .env file (OPENROUTER_API_KEY= or GROQ_API_KEY=)." Yellow
+        $skipOllama = $true
     }
 }
+
+if (-not $skipOllama) {
 Ok "Ollama is installed."
 
 # Make sure the Ollama server is running.
@@ -206,6 +206,7 @@ if ($envIsNew) {
     [System.IO.File]::WriteAllText($envPath, $envText, [System.Text.UTF8Encoding]::new($false))
     Ok ".env set to use $model."
 }
+} # end -not $skipOllama
 
 # -- 5a. Optional browser engine (Playwright) ---------------------------------
 # Each optional step below explains what it does and asks before downloading, so
@@ -287,30 +288,35 @@ if ($node) {
     Warn "Node.js not installed - /cloud skipped. ILLIP runs fully local without it."
 }
 
-# -- 6. Desktop cat -----------------------------------------------------------
-Step "Putting the ILLIP cat on your desktop..."
-$desktop = [Environment]::GetFolderPath("Desktop")
-$shell = New-Object -ComObject WScript.Shell
-$lnk = $shell.CreateShortcut((Join-Path $desktop "ILLIP Cat.lnk"))
-$lnk.TargetPath = Join-Path $venvPath "Scripts\pythonw.exe"
-$lnk.Arguments = '"' + (Join-Path $Root "scripts\illip_cat.pyw") + '"'
-$lnk.WorkingDirectory = $Root
-$lnk.Description = "Click the cat to start ILLIP"
-$iconPath = Join-Path $Root "assets\illip-icon.ico"
-if (Test-Path $iconPath) { $lnk.IconLocation = $iconPath }
-$lnk.Save()
-Ok "Desktop shortcut 'ILLIP Cat' created."
+# -- 6. Desktop cat + PATH (asked, like everything else) -----------------------
+Step "Optional: desktop shortcut + 'illip' terminal command..."
+Say "  Puts an 'ILLIP Cat' shortcut on your desktop (click it to start ILLIP)" Gray
+Say "  and adds this folder to your user PATH so 'illip' works in any terminal." Gray
+Say "  No other system changes." Gray
+if (Ask "Create the desktop shortcut and add 'illip' to your PATH?") {
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $shell = New-Object -ComObject WScript.Shell
+    $lnk = $shell.CreateShortcut((Join-Path $desktop "ILLIP Cat.lnk"))
+    $lnk.TargetPath = Join-Path $venvPath "Scripts\pythonw.exe"
+    $lnk.Arguments = '"' + (Join-Path $Root "scripts\illip_cat.pyw") + '"'
+    $lnk.WorkingDirectory = $Root
+    $lnk.Description = "Click the cat to start ILLIP"
+    $iconPath = Join-Path $Root "assets\illip-icon.ico"
+    if (Test-Path $iconPath) { $lnk.IconLocation = $iconPath }
+    $lnk.Save()
+    Ok "Desktop shortcut 'ILLIP Cat' created."
 
-# -- Add ILLIP to PATH so 'illip' works from any terminal ---------------------
-Step "Adding 'illip' command to your PATH..."
-$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($userPath -split ';' -contains $Root) {
-    Ok "'illip' already on PATH."
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($userPath -split ';' -contains $Root) {
+        Ok "'illip' already on PATH."
+    } else {
+        if ([string]::IsNullOrEmpty($userPath)) { $newPath = $Root }
+        else { $newPath = $userPath.TrimEnd(';') + ';' + $Root }
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+        Ok "Added 'illip' to PATH. Open a NEW terminal, then type: illip"
+    }
 } else {
-    if ([string]::IsNullOrEmpty($userPath)) { $newPath = $Root }
-    else { $newPath = $userPath.TrimEnd(';') + ';' + $Root }
-    [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-    Ok "Added 'illip' to PATH. Open a NEW terminal, then type: illip"
+    Warn "Skipped. Start ILLIP any time with: .\scripts\run_backend.ps1"
 }
 
 # -- Done ---------------------------------------------------------------------

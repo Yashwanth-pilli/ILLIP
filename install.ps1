@@ -55,7 +55,9 @@ Set-Location $InstallDir
 # Hand off to guided setup - it creates the venv, installs dependencies,
 # and explains + asks before every optional download (Ollama model,
 # Playwright browser, OmniRoute cloud). Duplicating that here would rot.
+# -ExecutionPolicy Bypass: fresh Windows defaults to Restricted, which would
+# block running setup.ps1 as a file even though 'irm | iex' itself worked.
 Write-Host ""
 Write-Host "Code downloaded. Starting guided setup..." -ForegroundColor Green
 Write-Host ""
-& .\setup.ps1
+& powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1

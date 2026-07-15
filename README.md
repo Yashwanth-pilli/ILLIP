@@ -5,8 +5,8 @@
 **Your AI company, in your device.**
 
 <p align="center">
-  <a href="https://github.com/Yashwanth-pilli/ILLIP-AI/actions"><img src="https://github.com/Yashwanth-pilli/ILLIP-AI/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/Yashwanth-pilli/ILLIP-AI/releases/latest"><img src="https://img.shields.io/github/v/release/Yashwanth-pilli/ILLIP-AI" alt="Release" /></a>
+  <a href="https://github.com/Yashwanth-pilli/ILLIP/actions"><img src="https://github.com/Yashwanth-pilli/ILLIP/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Yashwanth-pilli/ILLIP/releases/latest"><img src="https://img.shields.io/github/v/release/Yashwanth-pilli/ILLIP" alt="Release" /></a>
   <img src="https://img.shields.io/badge/runs%20on-4GB%20laptop%20%E2%86%92%20big%20GPU-4fd1c5" alt="Hardware" />
   <img src="https://img.shields.io/badge/privacy-100%25%20local-success" alt="Local" />
 </p>
@@ -85,6 +85,15 @@ Route any task to the right agent. Agents retry automatically on failure (expone
 - **Speech-to-text** — local Whisper (`pip install faster-whisper`). Runs on CPU or CUDA.
 - **Text-to-speech** — Piper (local, offline) with gTTS fallback.
 - Use the 🎤 mic button in the UI to speak instead of type.
+
+### Phone Access (Telegram)
+Chat with your local ILLIP from your phone — the AI stays on your laptop, only the messages travel.
+
+1. Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` → copy the token
+2. Add `TELEGRAM_BOT_TOKEN=your_token` to `.env`
+3. Start ILLIP — the bot comes online automatically; the first person to `/start` it becomes owner (whitelisted; others need `/allow <id>`)
+
+Send text, voice notes (transcribed locally), or photos (vision model). Commands: `/image`, `/remember`, `/recall`, `/run`, `/search`, `/agent`, `/model`, `/status`, `/update` and more — `/help` lists all.
 
 ### Browser Automation
 Full Playwright-based browser agent. Shadow DOM support, task planning, retry logic. Chromium auto-installs on first use.
