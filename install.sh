@@ -10,10 +10,14 @@ PYTHON="${ILLIP_PYTHON:-python3}"
 
 echo "=== ILLIP AI Installer ==="
 echo "This installer will:"
-echo "  1) Download or update ILLIP source code from GitHub"
-echo "  2) Create a Python virtual environment (optional, default on)"
-echo "  3) Install Python dependencies from requirements.txt"
-echo "  4) Create .env and data folders for first run"
+echo "  1) Download ILLIP source code from GitHub (or update an existing install)"
+echo "  2) Create a Python virtual environment -> keeps ILLIP's packages off your system Python"
+echo "  3) Install Python packages           -> web app, memory, agents"
+echo "  4) Create .env and data folders       -> your settings and ILLIP's memory live here"
+echo ""
+echo "It does NOT download any AI model by itself. After install you pick one:"
+echo "  - Ollama (ollama.com): free local model, private, works offline"
+echo "  - Or a cloud key (OpenRouter/Groq) in .env: no big download, needs internet"
 echo ""
 
 # Check Python
@@ -63,10 +67,12 @@ echo "Installing Python dependencies from requirements.txt (downloads may take a
 if [ ! -f ".env" ]; then
   cp .env.example .env
   echo ""
-  echo "=== SETUP REQUIRED ==="
-  echo "Edit .env to configure your model provider (Ollama/OpenRouter/Groq)."
-  echo "Telegram, Discord, Slack, Email — all optional, set env vars to enable."
-  echo "======================"
+  echo "=== ONE STEP LEFT: pick your AI brain ==="
+  echo "Edit .env and set ONE of these:"
+  echo "  Local + free + private : install Ollama from ollama.com, then 'ollama pull llama3.2'"
+  echo "  Cloud key              : OpenRouter or Groq API key (no big download)"
+  echo "Optional extras (set env vars to enable): Telegram, Discord, Slack, Email."
+  echo "=========================================="
 fi
 
 # Create data dirs

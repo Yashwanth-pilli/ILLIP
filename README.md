@@ -41,7 +41,7 @@ irm https://raw.githubusercontent.com/Yashwanth-pilli/ILLIP/main/install.ps1 | i
 curl -fsSL https://raw.githubusercontent.com/Yashwanth-pilli/ILLIP/main/install.sh | bash
 ```
 
-The installer prints each step clearly (code download/update, dependency installation, and first-run setup) so users can see exactly what is being installed.
+Copy-paste one line, and the installer does the rest: it downloads the code, then walks you through setup — explaining what each piece is for (Python runs ILLIP, Ollama gives you a free private local AI, Playwright lets ILLIP browse the web, OmniRoute adds free cloud models) and asking permission before any big download.
 
 | URL | What |
 |---|---|

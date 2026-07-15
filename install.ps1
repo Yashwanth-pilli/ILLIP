@@ -1,4 +1,4 @@
-# ILLIP AI — one-line installer for Windows
+# ILLIP AI - one-line installer for Windows
 # Run: irm https://raw.githubusercontent.com/Yashwanth-pilli/ILLIP/main/install.ps1 | iex
 
 param(
@@ -10,9 +10,14 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "=== ILLIP AI Installer ===" -ForegroundColor Cyan
 Write-Host "This installer will:"
-Write-Host "  1) Download or update ILLIP source code from GitHub"
-Write-Host "  2) Install Python dependencies from requirements.txt"
-Write-Host "  3) Create .env and data folders for first run"
+Write-Host "  1) Download ILLIP source code from GitHub (or update an existing install)"
+Write-Host "  2) Hand off to guided setup, which explains and ASKS before each piece:"
+Write-Host "     - Python 3.12          -> runs ILLIP itself"
+Write-Host "     - Python packages      -> web app, memory, agents"
+Write-Host "     - Ollama + local model -> free private AI chat, works offline (sized to your hardware)"
+Write-Host "     - Playwright (optional)-> lets ILLIP browse websites for you"
+Write-Host "     - OmniRoute (optional) -> free big cloud models via /cloud, zero load on your PC"
+Write-Host "  Nothing big downloads without your yes."
 Write-Host ""
 
 # Check Python
@@ -34,7 +39,7 @@ try {
 
 # Clone or pull
 if (Test-Path (Join-Path $InstallDir ".git")) {
-    Write-Host "Directory $InstallDir exists — pulling latest code from $RepoUrl ..."
+    Write-Host "Directory $InstallDir exists - pulling latest code from $RepoUrl ..."
     git -C $InstallDir pull --ff-only origin main
 } elseif (Test-Path $InstallDir) {
     Write-Host "ERROR: $InstallDir already exists but is not a git repository." -ForegroundColor Red
@@ -47,32 +52,10 @@ if (Test-Path (Join-Path $InstallDir ".git")) {
 
 Set-Location $InstallDir
 
-# Install deps
-Write-Host "Installing Python dependencies from requirements.txt (downloads may take a few minutes)..."
-python -m pip install -r requirements.txt
-
-# Setup .env
-if (-not (Test-Path ".env")) {
-    Copy-Item ".env.example" ".env"
-    Write-Host ""
-    Write-Host "=== SETUP REQUIRED ===" -ForegroundColor Yellow
-    Write-Host "Edit .env to configure your model provider (Ollama/OpenRouter/Groq)."
-    Write-Host "Telegram, Discord, Slack, Email — all optional, set env vars to enable."
-    Write-Host "Open .env with: notepad .env"
-    Write-Host "======================"
-}
-
-# Create data dirs
-python -c "from app.config import settings; settings.ensure_directories()" 2>$null
-if (-not $?) {
-    New-Item -ItemType Directory -Force -Path "data\memory","data\logs","data\tasks","data\workspaces","data\snapshots","data\connectors" | Out-Null
-}
-
+# Hand off to guided setup - it creates the venv, installs dependencies,
+# and explains + asks before every optional download (Ollama model,
+# Playwright browser, OmniRoute cloud). Duplicating that here would rot.
 Write-Host ""
-Write-Host "ILLIP AI installed at: $(Get-Location)" -ForegroundColor Green
+Write-Host "Code downloaded. Starting guided setup..." -ForegroundColor Green
 Write-Host ""
-Write-Host "Start:  python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
-Write-Host ""
-Write-Host "Add integrations from URL (zero download):"
-Write-Host "  POST /api/skills/install  {`"url`": `"https://raw.github.com/.../skill.py`"}"
-Write-Host ""
+& .\setup.ps1
