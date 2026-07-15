@@ -293,7 +293,8 @@ Step "Optional: desktop shortcut + 'illip' terminal command..."
 Say "  Puts an 'ILLIP Cat' shortcut on your desktop (click it to start ILLIP)" Gray
 Say "  and adds this folder to your user PATH so 'illip' works in any terminal." Gray
 Say "  No other system changes." Gray
-if (Ask "Create the desktop shortcut and add 'illip' to your PATH?") {
+$wantsShortcut = Ask "Create the desktop shortcut and add 'illip' to your PATH?"
+if ($wantsShortcut) {
     $desktop = [Environment]::GetFolderPath("Desktop")
     $shell = New-Object -ComObject WScript.Shell
     $lnk = $shell.CreateShortcut((Join-Path $desktop "ILLIP Cat.lnk"))
@@ -325,9 +326,14 @@ Say "==========================================" Green
 Say "        ILLIP setup is complete!          " Green
 Say "==========================================" Green
 Say ""
-Say "  A little cat now lives on your screen." White
-Say "  Click the cat -> ILLIP starts and opens in your browser." White
-Say "  Drag the cat anywhere you like. Right-click it to quit." White
+if ($wantsShortcut) {
+    Say "  A little cat now lives on your desktop." White
+    Say "  Click the cat -> ILLIP starts and opens in your browser." White
+    Say "  Drag the cat anywhere you like. Right-click it to quit." White
+} else {
+    Say "  Start ILLIP any time with:  .\scripts\run_backend.ps1" White
+    Say "  Then open http://127.0.0.1:8000 in your browser." White
+}
 Say ""
 Say "  Optional (for the browser agent): open a terminal and run:" Gray
 Say "    .venv\Scripts\playwright install chromium" Gray

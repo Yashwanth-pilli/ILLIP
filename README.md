@@ -13,6 +13,9 @@
 
 ILLIP AI is a portable, private, self-improving AI system that runs on your own hardware. It is not a chatbot. It is a full AI platform with agents, memory, knowledge graph, media generation, browser automation, workspace intelligence, and local model support — all offline-first, all under your control.
 
+<p align="center"><img src="assets/illip-demo.png" alt="ILLIP chatting on a local model — it detects your GPU and picks the best model for it" width="900" /></p>
+<p align="center"><sub>Real screenshot: local model on an RTX 4060 laptop, fully offline. Note the hardware banner — ILLIP detects your GPU/RAM and recommends the best model it can run.</sub></p>
+
 ---
 
 ## Quick Start
