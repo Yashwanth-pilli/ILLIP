@@ -161,23 +161,23 @@ if (-not $ollamaUp) {
 if ($ollamaUp) { Ok "Ollama is running." } else { Warn "Ollama did not respond - the model download below may start it itself." }
 
 # -- 5. Hardware check -> model pick -------------------------------------------
-Step "Looking at your hardware to pick the right AI model..."
+# The pick comes from ILLIP's own hardware detector + model catalog (the same
+# code the app uses at runtime, user-overridable via data/model_catalog.json)
+# - no duplicate hardcoded ladder here.
+Step "Asking ILLIP's hardware detector to pick the right AI model..."
 
-$ramGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
-$vramGB = 0
-if (Has-Command "nvidia-smi") {
-    try {
-        $mib = (& nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
-        if ($mib) { $vramGB = [math]::Round([int]$mib / 1024) }
-    } catch {}
+$pickLine = (& $venvPython (Join-Path $Root "scripts\pick_model.py") 2>$null |
+    Where-Object { $_ -match '\|' } | Select-Object -Last 1)
+
+if ($pickLine) {
+    $parts = $pickLine.Trim().Split('|')
+    $model = $parts[0]
+    $size  = "$($parts[1]) GB"
+    Say "    NVIDIA GPU VRAM: $($parts[2]) GB   |   RAM: $($parts[3]) GB"
+} else {
+    Warn "Hardware probe failed - falling back to the smallest safe model."
+    $model = "llama3.2:1b"; $size = "1.3 GB"
 }
-Say "    RAM: ${ramGB} GB   |   NVIDIA GPU VRAM: ${vramGB} GB"
-
-# Model ladder by hardware. Sizes are approximate download sizes.
-if ($vramGB -ge 8)      { $model = "qwen2.5:7b";  $size = "4.7 GB" }
-elseif ($vramGB -ge 4)  { $model = "qwen2.5:3b";  $size = "1.9 GB" }
-elseif ($ramGB -ge 16)  { $model = "qwen2.5:3b";  $size = "1.9 GB" }
-else                    { $model = "llama3.2:1b"; $size = "1.3 GB" }
 Ok "Best model for this computer: $model (download ~$size)"
 
 $haveModel = $false

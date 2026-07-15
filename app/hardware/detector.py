@@ -27,7 +27,7 @@ class HardwareInfo:
     gpu_shared_vram_gb: float = 0.0   # Windows shared GPU memory (system RAM as virtual VRAM)
     os: str = platform.system()
     tier: int = 1  # 1=low, 2=mid, 3=good, 4=high-end
-    recommended_model: str = "qwen2.5:3b"
+    recommended_model: str = ""  # filled by detect_hardware() from the catalog
     max_context: int = 4096
     safe_threads: int = 4
     warnings: list = field(default_factory=list)
@@ -116,14 +116,21 @@ def detect_hardware() -> HardwareInfo:
     else:
         info.tier = 1
 
-    # Model and context recommendations (safe for each tier)
+    # Context/thread budgets stay per-tier; the model pick comes from the
+    # user-overridable catalog (data/model_catalog.json) — no hardcoded names.
     tier_config = {
-        4: ("qwen2.5:7b",  8192, max(1, info.cpu_cores - 2)),
-        3: ("qwen2.5:7b",  8192, max(1, info.cpu_cores - 2)),
-        2: ("qwen2.5:3b",  4096, max(1, (info.cpu_cores or 4) - 2)),
-        1: ("qwen2.5:1.5b", 2048, 2),
+        4: (8192, max(1, info.cpu_cores - 2)),
+        3: (8192, max(1, info.cpu_cores - 2)),
+        2: (4096, max(1, (info.cpu_cores or 4) - 2)),
+        1: (2048, 2),
     }
-    info.recommended_model, info.max_context, info.safe_threads = tier_config[info.tier]
+    info.max_context, info.safe_threads = tier_config[info.tier]
+    from app.services.model_catalog import load_catalog, recommend_download
+    catalog = load_catalog()
+    info.recommended_model = (
+        recommend_download(catalog, set(), info.gpu_vram_gb, info.ram_gb)
+        or min(catalog, key=lambda e: e.get("size_gb", 99))["name"]
+    )
 
     # Safety warnings
     if info.ram_available_gb > 0 and info.ram_available_gb < 2:

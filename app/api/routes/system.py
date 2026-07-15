@@ -271,6 +271,14 @@ async def list_models_with_plans():
     except Exception:
         pass
 
+    # Same model often exists under two names (e.g. 'ornith:9b' copied from an
+    # hf.co pull) — compare digests so we never tell the user to "switch" to
+    # the model they are already running.
+    digests = {m.get("name", ""): m.get("digest", "") for m in installed}
+    active_digest = digests.get(_cfg.ollama_model, "")
+    if recommended and active_digest and digests.get(recommended, "x") == active_digest:
+        recommended = _cfg.ollama_model
+
     results = []
     for m in installed:
         name = m.get("name", "")
