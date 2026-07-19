@@ -65,21 +65,26 @@ def _load_allowed() -> set[int]:
 
 
 def _save_owner(user_id: int) -> None:
+    # Append, never sort: line 1 is the owner forever. Sorting re-ordered the
+    # file, so /allow-ing a numerically smaller ID silently transferred
+    # ownership to that user.
     f = _owner_file()
-    existing = set()
+    lines: list[str] = []
     if f.exists():
-        for line in f.read_text().splitlines():
-            if line.strip().isdigit():
-                existing.add(line.strip())
-    existing.add(str(user_id))
-    f.write_text("\n".join(sorted(existing)))
+        lines = [ln.strip() for ln in f.read_text().splitlines() if ln.strip().isdigit()]
+    if str(user_id) not in lines:
+        lines.append(str(user_id))
+    f.write_text("\n".join(lines))
 
 
 _allowed_users: set[int] = set()
 
 
 def _is_allowed(user_id: int) -> bool:
-    return len(_allowed_users) == 0 or user_id in _allowed_users
+    # Unclaimed bot (empty allowlist) is closed: only /start may claim it.
+    # An open default would let any stranger who finds the bot username run
+    # commands (including /run) before the owner's first /start.
+    return user_id in _allowed_users
 
 
 # ── ILLIP API helpers ─────────────────────────────────────────────────────────
