@@ -59,9 +59,12 @@ if "$PYTHON" -m venv --help >/dev/null 2>&1 && [ "${ILLIP_VENV:-1}" = "1" ]; the
   PYTHON=python
 fi
 
-# Install deps
-echo "Installing Python dependencies from requirements.txt (downloads may take a few minutes)..."
-"$PYTHON" -m pip install -r requirements.txt
+# Install deps — prefer the lock file (exact known-good versions) so a breaking
+# release of a dependency can't break fresh installs.
+REQ_FILE="requirements.lock"
+[ -f "$REQ_FILE" ] || REQ_FILE="requirements.txt"
+echo "Installing Python dependencies from $REQ_FILE (downloads may take a few minutes)..."
+"$PYTHON" -m pip install -r "$REQ_FILE"
 
 # Setup .env
 if [ ! -f ".env" ]; then

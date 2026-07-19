@@ -102,7 +102,11 @@ if (-not (Test-Path $venvPython)) {
 
 Step "Installing dependencies (first run downloads a few hundred MB - be patient)..."
 & $venvPython -m pip install --upgrade pip --quiet
-& $venvPython -m pip install -r (Join-Path $Root "requirements.txt")
+# Prefer the lock file (exact known-good versions) so a breaking release of a
+# dependency can't break fresh installs; requirements.txt is the fallback.
+$reqFile = Join-Path $Root "requirements.lock"
+if (-not (Test-Path $reqFile)) { $reqFile = Join-Path $Root "requirements.txt" }
+& $venvPython -m pip install -r $reqFile
 if ($LASTEXITCODE -ne 0) {
     Fail "Some dependencies failed to install."
     Say "  Fix: check your internet connection, then double-click setup.bat again." Yellow

@@ -157,7 +157,8 @@ def main():
         import subprocess
         from pathlib import Path
         click.echo("Installing dependencies...")
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
+        req = "requirements.lock" if Path("requirements.lock").exists() else "requirements.txt"
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", req], check=True)
         env = Path(".env")
         if not env.exists():
             example = Path(".env.example")
