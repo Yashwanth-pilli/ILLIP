@@ -270,3 +270,7 @@ playwright install chromium
 Copyright (c) 2026 Yashwanth Dharan Tej Pilli. Licensed under [AGPL-3.0](LICENSE).
 
 Versions published before the license-change commit (tag `license-agpl-3.0`) were released under the MIT License. Those earlier versions remain available under MIT.
+
+### Commercial licensing
+
+AGPL-3.0 requires any copy or hosted service to publish its source. To use ILLIP without those terms, for example in closed-source software, ask for a separate commercial license: yashwanthdharantejillip@gmail.com
