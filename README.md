@@ -1,6 +1,6 @@
 <p align="center"><a href="assets/illip-logo.mp4"><img src="assets/illip-logo.gif" alt="ILLIP" width="180" /></a></p>
 
-# ILLIP AI — v3.1
+# ILLIP AI — v3.4
 
 **Your AI company, in your device.**
 
@@ -263,7 +263,7 @@ playwright install chromium
 
 ---
 
-**Version:** 3.1 | **Status:** Phase 3+ complete | **Default provider:** auto (Ollama → llamafile → OpenRouter → Groq → Mock)
+**Version:** 3.4 | **Status:** Phase 3+ complete | **Default provider:** auto (Ollama → llamafile → OpenRouter → Groq → Mock)
 
 ## License
 
