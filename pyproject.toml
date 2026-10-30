@@ -7,14 +7,14 @@ name = "illip-ai"
 version = "3.1.0"
 description = "Your AI company, in your device — local-first, private, portable"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-only" }
 requires-python = ">=3.9"
 keywords = ["ai", "llm", "agents", "local", "private", "ollama", "claude"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",

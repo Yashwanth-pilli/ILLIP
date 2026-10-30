@@ -9,7 +9,7 @@
   <a href="https://github.com/Yashwanth-pilli/ILLIP/releases/latest"><img src="https://img.shields.io/github/v/release/Yashwanth-pilli/ILLIP" alt="Release" /></a>
   <img src="https://img.shields.io/badge/runs%20on-4GB%20laptop%20%E2%86%92%20big%20GPU-4fd1c5" alt="Hardware" />
   <img src="https://img.shields.io/badge/privacy-100%25%20local-success" alt="Local" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0 License" /></a>
 </p>
 
 ILLIP AI is a portable, private, self-improving AI system that runs on your own hardware. It is not a chatbot. It is a full AI platform with agents, memory, knowledge graph, media generation, browser automation, workspace intelligence, and local model support — all offline-first, all under your control.
@@ -264,3 +264,9 @@ playwright install chromium
 ---
 
 **Version:** 3.1 | **Status:** Phase 3+ complete | **Default provider:** auto (Ollama → llamafile → OpenRouter → Groq → Mock)
+
+## License
+
+Copyright (c) 2026 Yashwanth Dharan Tej Pilli. Licensed under [AGPL-3.0](LICENSE).
+
+Versions published before the license-change commit (tag `license-agpl-3.0`) were released under the MIT License. Those earlier versions remain available under MIT.
