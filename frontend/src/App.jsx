@@ -73,7 +73,13 @@ export default function App() {
   const audioChunksRef = useRef([])
 
   // ── Nav panel ───────────────────────────────────────────────────────────────
-  const [activePanel, setActivePanel] = useState(null)
+  const [activePanel, setActivePanel] = useState('activity')
+  const [panelPinned, setPanelPinned] = useState(false)
+  const [theme, setTheme] = useState(() => localStorage.getItem('illip_theme') || 'dark')
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('illip_theme', theme)
+  }, [theme])
 
   // ── Panel data ──────────────────────────────────────────────────────────────
   const [systemStatus, setSystemStatus] = useState(null)
@@ -1089,11 +1095,16 @@ export default function App() {
 
   // ── Panel toggle ────────────────────────────────────────────────────────────
   const togglePanel = useCallback((name) => {
-    setActivePanel(prev => prev === name ? null : name)
-  }, [])
+    if (activePanel === name) {
+      setActivePanel(null)
+      setPanelPinned(false)
+    } else {
+      setActivePanel(name)
+    }
+  }, [activePanel])
 
   return (
-    <div className="app-container">
+    <div className={`app-container illip-workspace theme-${theme}`}>
       <div className="grid-bg" />
       <div className="scanlines" />
 
@@ -1121,6 +1132,9 @@ export default function App() {
         autoSpeak={autoSpeak}
         chatModes={chatModes}
         onToggleChatMode={toggleChatMode}
+        theme={theme}
+        onToggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+        onOpenPanel={(name) => setActivePanel(name)}
       />
 
       <RamHelper hwLive={hwLive} />
@@ -1129,12 +1143,16 @@ export default function App() {
         <NavRail
           activePanel={activePanel}
           onTogglePanel={togglePanel}
+          onNewChat={() => setNewChatChoiceOpen(true)}
           govCount={govPending.length}
         />
 
+        <div className={`panel-edge-tab ${panelPinned ? 'pinned' : ''}`} title={panelPinned ? 'Unpin side panel' : 'Pin side panel'} onClick={() => { if (!activePanel) setActivePanel('activity'); setPanelPinned(v => !v) }}>
+          {panelPinned ? '›' : '‹'}
+        </div>
         <SlidePanel
           activePanel={activePanel}
-          onClose={() => setActivePanel(null)}
+          onClose={() => { setActivePanel(null); setPanelPinned(false) }}
           systemStatus={systemStatus}
           hardwareStatus={hardwareStatus}
           hwLive={hwLive}
@@ -1167,6 +1185,14 @@ export default function App() {
           onSwitchProject={(id) => { setActiveProject(id); loadChatHistory(id) }}
           onDeleteProject={deleteProject}
           onNewChat={() => setNewChatChoiceOpen(true)}
+          agentTask={agentTask}
+          connected={connected}
+          statusText={statusText}
+          onOpenBrowser={() => { setBrowserOpen(true); api.browserStatus().then(s => setHasSavedSession(!!s.has_saved_session)).catch(() => {}) }}
+          onOpenImage={() => setImagePanelOpen(true)}
+          onOpenVideo={() => setVideoPanelOpen(true)}
+          onNavigate={(name) => setActivePanel(name)}
+          pinned={panelPinned}
         />
 
         <ChatMain

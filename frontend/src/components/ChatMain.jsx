@@ -55,6 +55,7 @@ export default function ChatMain({
   const [slashDismissed, setSlashDismissed] = useState(false) // Esc / accept hides it
   const [toolsOpen, setToolsOpen] = useState(false)  // the "+" tools menu
   const inputRef = useRef(null)
+  const fileInputRef = useRef(null)
   const toolsRef = useRef(null)
 
   // Close the "+" menu on outside click / Escape.
@@ -162,6 +163,11 @@ export default function ChatMain({
     setInputValue('')
   }
 
+  const choosePrompt = (prompt) => {
+    setInputValue(prompt)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   const handleFileSelect = async (e) => {
     const file = e.target.files[0]
     e.target.value = ''
@@ -202,8 +208,26 @@ export default function ChatMain({
         </div>
       )}
 
+
       <MessageList
         messages={messages}
+        emptyComponent={!researchOpen && !browserOpen && !imagePanelOpen && !videoPanelOpen ? (
+        <section className="welcome-workspace">
+          <div className="welcome-emblem"><img src="/illip-logo.png" alt="ILLIP" /></div>
+          <h1>ILLIP</h1>
+          <h2>Your private AI workspace</h2>
+          <p className="welcome-subtitle">Local intelligence. Your data stays yours.</p>
+          <div className="welcome-cards">
+            <button className="welcome-card" onClick={() => choosePrompt('Help me plan and build a project: ')}><span className="welcome-card-icon purple">⌘</span><strong>Build a project</strong><small>Plan, code and structure your next idea.</small><b>↗</b></button>
+            <button className="welcome-card" onClick={() => choosePrompt('Explain this code step by step: ')}><span className="welcome-card-icon blue">▤</span><strong>Explain code</strong><small>Understand and improve code clearly.</small><b>↗</b></button>
+            <button className="welcome-card" onClick={() => choosePrompt('Research this topic and give me a structured answer: ')}><span className="welcome-card-icon violet">⌕</span><strong>Research a topic</strong><small>Explore a subject with clear, structured guidance.</small><b>↗</b></button>
+            <button className="welcome-card" onClick={() => fileInputRef.current?.click()}><span className="welcome-card-icon cyan">↥</span><strong>Analyze a file</strong><small>Summarize, extract insights or inspect files.</small><b>↗</b></button>
+            <button className="welcome-card" onClick={onOpenImage}><span className="welcome-card-icon pink">▧</span><strong>Create an image</strong><small>Open ILLIP's image generation workspace.</small><b>↗</b></button>
+            <button className="welcome-card" onClick={onOpenBrowser}><span className="welcome-card-icon green">◎</span><strong>Browse the web</strong><small>Use the integrated browser for live tasks.</small><b>↗</b></button>
+          </div>
+          <div className="welcome-suggestions"><span>✦</span><strong>Ideas to get started</strong><button onClick={() => choosePrompt('Create a Python script for web scraping.')}>Create a Python script for web scraping</button><button onClick={() => choosePrompt('Compare local LLM models for my laptop.')}>Compare local LLM models</button><button onClick={() => choosePrompt('Design a system architecture for my project.')}>Design a system architecture</button></div>
+        </section>
+        ) : null}
         onFeedback={onFeedback}
         onSpeak={onSpeak}
         onRegenerate={onRegenerate}
@@ -369,7 +393,7 @@ export default function ChatMain({
                 handleSubmit(e)
               }
             }}
-            placeholder={isLoading ? 'ILLIP is working…' : 'Message ILLIP… (Shift+Enter for a new line)'}
+            placeholder={isLoading ? 'ILLIP is working…' : 'Ask anything or give a task to your AI agents…'}
             disabled={isLoading}
           />
           <button
@@ -383,7 +407,7 @@ export default function ChatMain({
           </button>
           <label className="img-btn" title="Attach any file — images, PDFs, zips, anything, any size">
             📎
-            <input type="file" style={{display:'none'}} onChange={handleFileSelect} />
+            <input ref={fileInputRef} type="file" style={{display:'none'}} onChange={handleFileSelect} />
           </label>
           {isLoading ? (
             <button type="button" className="send-button stop-button" onClick={onStop}>
