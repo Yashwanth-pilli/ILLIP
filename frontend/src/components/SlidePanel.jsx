@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
+import { api } from '../api.js'
 import SystemPanel from './panels/SystemPanel.jsx'
 import HardwarePanel from './panels/HardwarePanel.jsx'
 import ModelsPanel from './panels/ModelsPanel.jsx'
@@ -15,11 +16,11 @@ import WorkspacePanel from './panels/WorkspacePanel.jsx'
 import ChatHistoryPanel from './panels/ChatHistoryPanel.jsx'
 
 const TITLES = {
-  chats: 'Chats',
+  activity: 'Agent Activity', chats: 'Chats',
   system: 'System & Health', models: 'Models & Ghost Engine',
-  skills: 'Skills', governance: 'Governance',
-  scheduler: 'Scheduler', plugins: 'Plugins', stats: 'Stats',
-  memory: 'Memory', workspace: 'Workspace',
+  skills: 'Agents', governance: 'Approvals',
+  scheduler: 'Scheduler', plugins: 'Tools', stats: 'Usage & Stats',
+  memory: 'Memory', workspace: 'Projects',
 }
 
 function PanelSection({ title, desc, children }) {
@@ -68,15 +69,85 @@ function ModelsAndGhostPanel({ modelsData, onSwitchModel, pinnedModel, onDeleteM
   )
 }
 
+function ActivityPanel({ agentTask, connected, statusText, modelsData, hwLive, activeProject, onNewChat, onNavigate, onOpenBrowser, onOpenImage, onOpenVideo }) {
+  const [tab, setTab] = useState('activity')
+  const [recentFiles, setRecentFiles] = useState([])
+  useEffect(() => {
+    let alive = true
+    api.wsFiles().then(d => { if (alive) setRecentFiles((d.files || []).slice(0, 4)) }).catch(() => {})
+    return () => { alive = false }
+  }, [activeProject])
+  const task = agentTask?.goal || (typeof agentTask === 'string' ? agentTask : '')
+  const ram = hwLive?.ram_percent
+  const gpu = hwLive?.gpu_util_pct ?? hwLive?.gpu_pct
+  return (
+    <div className="activity-dashboard">
+      <div className="activity-tabs">
+        <button className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}>Agent Activity</button>
+        <button className={tab === 'tools' ? 'active' : ''} onClick={() => setTab('tools')}>Tools</button>
+        <button className={tab === 'plan' ? 'active' : ''} onClick={() => setTab('plan')}>Plan</button>
+      </div>
+      {tab === 'activity' && <>
+        <section className="activity-card current-agent-card">
+          <div className="activity-card-heading"><strong>Current Agent</strong><span className={`activity-state ${task ? 'running' : 'ready'}`}><i />{task ? 'Running' : 'Ready'}</span></div>
+          <div className="agent-identity"><span className="agent-avatar">⌘</span><div><strong>{task ? 'Task Agent' : 'ILLIP Assistant'}</strong><small>{task ? 'Working on your requested task' : 'Ready for your next instruction'}</small></div></div>
+          <div className="agent-task-line">{task || 'No active task. Start a chat or launch an agent task.'}</div>
+          <div className="activity-progress-track"><span className={task ? 'active' : ''} /></div>
+          <div className="activity-subnote">{task ? (agentTask?.loop ? 'Agent loop active' : 'Task submitted') : 'Waiting for a task'}</div>
+        </section>
+        <section className="activity-card">
+          <div className="activity-card-heading"><strong>Quick Tools</strong><button className="activity-link" onClick={() => onNavigate('plugins')}>View all</button></div>
+          <div className="quick-tool-grid">
+            <button onClick={onOpenBrowser}><span>◎</span>Browser</button>
+            <button onClick={onOpenImage}><span>▧</span>Image</button>
+            <button onClick={onOpenVideo}><span>▷</span>Video</button>
+            <button onClick={() => onNavigate('workspace')}><span>▱</span>Workspace</button>
+          </div>
+        </section>
+        <section className="activity-card">
+          <div className="activity-card-heading"><strong>Recent Files</strong><button className="activity-link" onClick={() => onNavigate('workspace')}>View all</button></div>
+          {recentFiles.length ? <div className="activity-file-list">{recentFiles.map((f, i) => <div className="activity-file" key={`${f.name || f.filename || 'file'}-${i}`}><span>▤</span><div><strong>{f.name || f.filename || 'Workspace file'}</strong><small>{f.path || 'Project workspace'}</small></div></div>)}</div> : <p className="activity-empty">No recent files in this workspace.</p>}
+        </section>
+        <section className="activity-card status-card">
+          <div className="activity-card-heading"><strong>System Status</strong><span className={`activity-state ${connected ? 'running' : 'ready'}`}><i />{connected ? 'Online' : 'Connecting'}</span></div>
+          <div className="status-line"><span>Ollama</span><b>{connected ? 'Connected' : 'Checking'}</b></div>
+          <div className="status-line"><span>Model</span><b>{modelsData?.active || 'Auto'}</b></div>
+          {ram != null && <div className="status-line"><span>RAM</span><b>{Math.round(ram)}%</b></div>}
+          {gpu != null && <div className="status-line"><span>GPU</span><b>{Math.round(gpu)}%</b></div>}
+          <small className="status-footnote">{statusText || 'Local system connection status'}</small>
+        </section>
+      </>}
+      {tab === 'tools' && <section className="activity-card activity-tools-list">
+        <strong>Available tools</strong>
+        <button onClick={onOpenBrowser}><span>◎</span><div><b>Browser</b><small>Open the integrated browser workspace</small></div><em>›</em></button>
+        <button onClick={onOpenImage}><span>▧</span><div><b>Image generation</b><small>Create images from a prompt</small></div><em>›</em></button>
+        <button onClick={onOpenVideo}><span>▷</span><div><b>Video generation</b><small>Open the video workspace</small></div><em>›</em></button>
+        <button onClick={() => onNavigate('plugins')}><span>⌘</span><div><b>Connected tools</b><small>Manage plugins and integrations</small></div><em>›</em></button>
+        <button onClick={() => onNavigate('skills')}><span>♧</span><div><b>Agent skills</b><small>Browse installed skills</small></div><em>›</em></button>
+      </section>}
+      {tab === 'plan' && <section className="activity-card activity-plan-card">
+        <strong>Workspace overview</strong>
+        <div className="status-line"><span>Active project</span><b>{activeProject || 'Default'}</b></div>
+        <div className="status-line"><span>Selected model</span><b>{modelsData?.active || 'Auto'}</b></div>
+        <div className="plan-current-task"><small>Current task</small><p>{task || 'No task is currently running.'}</p></div>
+        <button className="activity-primary-btn" onClick={onNewChat}>Start a new task</button>
+      </section>}
+    </div>
+  )
+}
+
 export default function SlidePanel({
-  activePanel, onClose,
+  activePanel, onClose, pinned = false,
   systemStatus, hardwareStatus, hwLive, modelsData, skills,
   plugins, healthData, govPending, schedulerJobs, stats, pinnedModel,
   onSwitchModel, onDeleteModel, onModelsChanged, onGovApprove, onGovDeny, onSchedRun, onSchedToggle,
   onAddPlugin, onDeletePlugin, onInstallSkill, onShowMarketplace, onCreateJob,
   activeProject, projects, onSwitchProject, onDeleteProject, onNewChat,
+  agentTask, connected, statusText, onOpenBrowser, onOpenImage, onOpenVideo,
+  onNavigate = () => {},
 }) {
   const panelProps = {
+    activity:   { component: ActivityPanel, props: { agentTask, connected, statusText, modelsData, hwLive, activeProject, onNewChat, onNavigate, onOpenBrowser, onOpenImage, onOpenVideo } },
     chats:      { component: ChatHistoryPanel,     props: { projects, activeProject, onSwitchProject, onDeleteProject, onNewChat, onClose } },
     system:     { component: SystemAndHealthPanel, props: { systemStatus, hardwareStatus, hwLive, healthData, onSwitchModel } },
     models:     { component: ModelsAndGhostPanel,  props: { modelsData, onSwitchModel, pinnedModel, onDeleteModel, onModelsChanged } },
@@ -93,7 +164,7 @@ export default function SlidePanel({
   const PanelComponent = current?.component
 
   return (
-    <div className={`slide-panel ${activePanel ? 'open' : ''}`}>
+    <div className={`slide-panel ${activePanel ? 'open' : ''} ${pinned ? 'pinned' : ''}`}>
       <div className="slide-panel-header">
         <span className="slide-panel-title">{TITLES[activePanel] || ''}</span>
         <button className="slide-close-btn" onClick={onClose}>✕</button>
